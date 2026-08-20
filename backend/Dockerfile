@@ -31,18 +31,28 @@ COPY scenario-engine /app/scenario-engine
 # ML models
 COPY models /app/models
 
+# Boundary
 COPY boundary.geojson /app/boundary.geojson
 
-COPY data/feature_engineering /app/data/feature_engineering
-COPY data/predictions /app/data/predictions
-COPY data/raw/osm/layers /app/data/raw/osm/layers
+# Required training dataset
+COPY data/feature_engineering/training_dataset.csv \
+     /app/data/feature_engineering/training_dataset.csv
 
-COPY boundary.geojson /app/boundary.geojson
-COPY data/feature_engineering /app/data/feature_engineering
-COPY data/predictions /app/data/predictions
-COPY data/raw/osm/layers /app/data/raw/osm/layers
+# Required prediction artifacts
+COPY data/predictions/Predicted_LST.png \
+     /app/data/predictions/Predicted_LST.png
 
-RUN mkdir -p /app/data /app/backend/logs
+COPY data/predictions/Predicted_LST.tif \
+     /app/data/predictions/Predicted_LST.tif
+
+COPY data/predictions/predictions.csv \
+     /app/data/predictions/predictions.csv
+
+# 3D OSM layers
+COPY data/raw/osm/layers \
+     /app/data/raw/osm/layers
+
+RUN mkdir -p /app/backend/logs
 
 EXPOSE 8000
 

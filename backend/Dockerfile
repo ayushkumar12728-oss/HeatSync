@@ -22,7 +22,13 @@ COPY requirements.txt /app/requirements.txt
 RUN pip install --upgrade pip && \
     pip install -r /app/requirements.txt
 
+# Application source
 COPY backend /app/backend
+COPY ai-engine /app/ai-engine
+COPY gis-engine /app/gis-engine
+COPY scenario-engine /app/scenario-engine
+
+# ML models
 COPY models /app/models
 
 RUN mkdir -p /app/data /app/backend/logs

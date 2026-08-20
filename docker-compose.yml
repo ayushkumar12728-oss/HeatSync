@@ -1,0 +1,67 @@
+version: "3.8"
+
+# =============================================================================
+# Urban Digital Twin - local stack
+#
+#   docker compose up -d --build   # backend + optional database
+#
+# The API is artifact-first: it runs fine without the database. PostGIS is
+# started for convenience; point UDT_DATABASE_URL at it after running
+# `python database/migrate.py` +
+# `python database/seed/load_artifacts.py`.
+# =============================================================================
+
+services:
+  # --- Database (optional, PostGIS) --------------------------------------
+  database:
+    image: postgis/postgis:15-3.3
+    container_name: urban-twin-db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-urban_digital_twin}
+      POSTGRES_USER: ${POSTGRES_USER:-admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/schema:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-admin} -d ${POSTGRES_DB:-urban_digital_twin}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --- Backend API -------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: urban-twin-backend
+    environment:
+      # UDT_* variables are read by backend/config/settings.py. The database
+      # URL defaults to the compose-network PostGIS service (dev credentials
+      # from the database service above); override via UDT_DATABASE_URL.
+      UDT_DATABASE_URL: ${UDT_DATABASE_URL:-postgresql://admin:password@urban-twin-db:5432/urban_digital_twin}
+      UDT_CORS_ORIGINS: ${UDT_CORS_ORIGINS:-["http://localhost:3000"]}
+      UDT_LOG_LEVEL: ${UDT_LOG_LEVEL:-INFO}
+      UDT_ENABLE_LIVE_PROBES: ${UDT_ENABLE_LIVE_PROBES:-true}
+      # Keys are passed at runtime from the host .env - never baked into the
+      # image. OPENWEATHER_*/NEMOTRON_* are read directly by the services.
+      OPENWEATHER_API_KEY: ${OPENWEATHER_API_KEY:-}
+      OPENWEATHER_CACHE_SECONDS: ${OPENWEATHER_CACHE_SECONDS:-180}
+      NEMOTRON_API_KEY: ${NEMOTRON_API_KEY:-}
+      NEMOTRON_MODEL: ${NEMOTRON_MODEL:-nvidia/nemotron-mini-4b-instruct}
+      NEMOTRON_TIMEOUT_SECONDS: ${NEMOTRON_TIMEOUT_SECONDS:-25}
+      NEMOTRON_MAX_RETRIES: ${NEMOTRON_MAX_RETRIES:-1}
+      NEMOTRON_MAX_TOKENS: ${NEMOTRON_MAX_TOKENS:-512}
+    ports:
+      - "${API_PORT:-8000}:8000"
+    volumes:
+      - ./data:/app/data:ro
+      - ./models:/app/models:ro
+    depends_on:
+      - database
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

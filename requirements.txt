@@ -1,0 +1,66 @@
+# =============================================================================
+# Urban Digital Twin - runtime dependencies
+# Verified against the modules actually imported by the codebase.
+# Optional extras are marked with a comment.
+# =============================================================================
+
+# --- Geospatial --------------------------------------------------------------
+geopandas>=0.14.0
+rasterio>=1.3.0
+rioxarray>=0.14.0
+xarray>=2023.1.0
+pyproj>=3.6.0
+shapely>=2.0.0
+# gdal must be installed from the OS package manager on Windows/Linux
+# (see docs/setup.md). The Python bindings are pulled in by rasterio.
+
+# --- Satellite data ----------------------------------------------------------
+pystac-client>=0.7.0
+pystac>=1.8.0
+planetary-computer>=1.0.0
+stackstac>=0.5.0
+
+# --- Data processing ----------------------------------------------------------
+numpy>=1.24.0
+pandas>=2.0.0
+scipy>=1.10.0
+
+# --- Machine learning ----------------------------------------------------------
+scikit-learn>=1.3.0
+xgboost>=2.0.0
+lightgbm>=4.0.0
+catboost>=1.2.0
+joblib>=1.3.0
+optuna>=3.4.0
+shap>=0.44.0
+onnx>=1.14.0
+onnxmltools>=1.11.0
+onnxruntime>=1.16.0
+
+# --- Air quality interpolation ------------------------------------------------
+pykrige>=1.7.0
+# richdem (optional): faster DEM terrain derivatives; no wheel on some platforms
+# richdem>=0.3.0
+
+# --- Visualization ------------------------------------------------------------
+matplotlib>=3.7.0
+folium>=0.14.0          # optional: interactive maps
+plotly>=5.15.0          # optional: charts
+
+# --- API ----------------------------------------------------------------------
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+python-multipart>=0.0.9
+
+# --- Database (optional PostGIS mode) -----------------------------------------
+sqlalchemy>=2.0.0
+psycopg2-binary>=2.9.0
+alembic>=1.11.0
+
+# --- HTTP / utilities ----------------------------------------------------------
+requests>=2.31.0
+httpx>=0.24.0
+tqdm>=4.65.0
+python-dotenv>=1.0.0

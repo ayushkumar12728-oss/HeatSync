@@ -1,0 +1,29 @@
+# Ruff configuration for the Urban Digital Twin project.
+# Applied to the maintained code: backend/, scenario-engine/, database/, tests/.
+
+line-length = 100
+target-version = "py311"
+
+[lint]
+select = ["E", "F", "I", "UP", "B", "RUF", "S", "N"]
+ignore = [
+    # FastAPI idiom: Depends(...) / Field(...) call in default argument.
+    "B008",
+    # Directory names contain hyphens by design (ai-engine, gis-engine,
+    # scenario-engine) which is not a valid Python module name - loaded via
+    # importlib by path instead.
+    "N999",
+    # ML convention: feature matrices named X / X_all / X_pert (matches the
+    # ai-engine style).
+    "N803",
+    "N806",
+    # uvicorn servers intentionally bind 0.0.0.0 in containers.
+    "S104",
+]
+
+[lint.per-file-ignores]
+"tests/*" = ["S101"]  # assert is fine in tests
+# Dev/test automation scripts (Selenium browser harness, debug helpers).
+"scripts/browser_test.py" = ["S101", "S110", "S112", "S602", "S603", "S607", "E501", "RUF100"]
+"scripts/dump_*.py" = ["S101", "S110", "S112", "S602", "S603", "S607", "E501", "RUF100"]
+"scripts/find_overflow.py" = ["S101", "S110", "S112", "S602", "S603", "S607", "E501", "RUF100"]

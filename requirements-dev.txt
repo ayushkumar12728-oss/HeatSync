@@ -1,0 +1,11 @@
+# =============================================================================
+# Urban Digital Twin - development / test dependencies
+# Install with:  pip install -r requirements-dev.txt
+# =============================================================================
+
+-r requirements.txt
+
+pytest>=8.0.0
+pytest-cov>=5.0.0
+httpx>=0.24.0      # required by starlette TestClient (fastapi>=0.141)
+ruff>=0.5.0

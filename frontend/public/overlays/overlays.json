@@ -1,0 +1,603 @@
+{
+  "count": 18,
+  "overlays": {
+    "lst": {
+      "key": "lst",
+      "url": "/overlays/lst.png",
+      "bounds_wgs84": [
+        [
+          85.74229426592868,
+          20.12684830379514
+        ],
+        [
+          85.91257459415638,
+          20.12684830379514
+        ],
+        [
+          85.91257459415638,
+          20.400662569938035
+        ],
+        [
+          85.74229426592868,
+          20.400662569938035
+        ]
+      ],
+      "vmin": 35.293792724609375,
+      "vmax": 45.459014892578125,
+      "title": "Land Surface Temperature (observed)",
+      "unit": "\u00b0C",
+      "group": "HEAT",
+      "source": "Landsat 8/9 Collection-2 Level-2 (ST_B10), 30 m",
+      "type": "continuous"
+    },
+    "predicted_lst": {
+      "key": "predicted_lst",
+      "url": "/overlays/predicted_lst.png",
+      "bounds_wgs84": [
+        [
+          85.74250285811574,
+          20.126421928937656
+        ],
+        [
+          85.91278187183768,
+          20.126421928937656
+        ],
+        [
+          85.91278187183768,
+          20.400416693378794
+        ],
+        [
+          85.74250285811574,
+          20.400416693378794
+        ]
+      ],
+      "vmin": 32.205814361572266,
+      "vmax": 45.23984146118164,
+      "title": "Predicted LST (XGBoost)",
+      "unit": "\u00b0C",
+      "group": "HEAT",
+      "source": "XGBoost model prediction raster (data/predictions)",
+      "type": "continuous"
+    },
+    "heat_classes": {
+      "key": "heat_classes",
+      "url": "/overlays/heat_classes.png",
+      "bounds_wgs84": [
+        [
+          85.74229426592868,
+          20.12684830379514
+        ],
+        [
+          85.91257459415638,
+          20.12684830379514
+        ],
+        [
+          85.91257459415638,
+          20.400662569938035
+        ],
+        [
+          85.74229426592868,
+          20.400662569938035
+        ]
+      ],
+      "vmin": 1,
+      "vmax": 6,
+      "title": "Heat Classification",
+      "unit": "class",
+      "group": "HEAT",
+      "source": "Landsat LST, fixed breaks 20/25/30/35/40 \u00b0C",
+      "type": "categorical",
+      "stops": [
+        {
+          "color": "#2166ac",
+          "label": "Very Cool"
+        },
+        {
+          "color": "#67a9cf",
+          "label": "Cool"
+        },
+        {
+          "color": "#fdae61",
+          "label": "Moderate"
+        },
+        {
+          "color": "#f46d43",
+          "label": "Warm"
+        },
+        {
+          "color": "#d73027",
+          "label": "Hot"
+        },
+        {
+          "color": "#67001f",
+          "label": "Very Hot"
+        }
+      ]
+    },
+    "ndvi": {
+      "key": "ndvi",
+      "url": "/overlays/ndvi.png",
+      "bounds_wgs84": [
+        [
+          85.74248629086901,
+          20.126759325001633
+        ],
+        [
+          85.91248003734314,
+          20.126759325001633
+        ],
+        [
+          85.91248003734314,
+          20.400481279308913
+        ],
+        [
+          85.74248629086901,
+          20.400481279308913
+        ]
+      ],
+      "vmin": -0.5,
+      "vmax": 1.0,
+      "title": "NDVI",
+      "unit": "index (-1..1)",
+      "group": "VEGETATION",
+      "source": "Sentinel-2 Level-2A, 10 m",
+      "type": "continuous"
+    },
+    "green_cover": {
+      "key": "green_cover",
+      "url": "/overlays/green_cover.png",
+      "bounds_wgs84": [
+        [
+          85.74248629086901,
+          20.126759325001633
+        ],
+        [
+          85.91248003734314,
+          20.126759325001633
+        ],
+        [
+          85.91248003734314,
+          20.400481279308913
+        ],
+        [
+          85.74248629086901,
+          20.400481279308913
+        ]
+      ],
+      "vmin": 0,
+      "vmax": 1,
+      "title": "Green Cover",
+      "unit": "0/1",
+      "group": "VEGETATION",
+      "source": "Sentinel-2 NDVI > 0.30, 10 m",
+      "type": "categorical",
+      "stops": [
+        {
+          "color": "#d9d9d9",
+          "label": "Non-vegetation"
+        },
+        {
+          "color": "#1a9850",
+          "label": "Vegetation"
+        }
+      ]
+    },
+    "vegetation_density": {
+      "key": "vegetation_density",
+      "url": "/overlays/vegetation_density.png",
+      "bounds_wgs84": [
+        [
+          85.74248629086901,
+          20.126759325001633
+        ],
+        [
+          85.91248003734314,
+          20.126759325001633
+        ],
+        [
+          85.91248003734314,
+          20.400481279308913
+        ],
+        [
+          85.74248629086901,
+          20.400481279308913
+        ]
+      ],
+      "vmin": 1,
+      "vmax": 5,
+      "title": "Vegetation Density",
+      "unit": "class",
+      "group": "VEGETATION",
+      "source": "Sentinel-2 NDVI classes, 10 m",
+      "type": "categorical",
+      "stops": [
+        {
+          "color": "#d9f0a3",
+          "label": "Very Low"
+        },
+        {
+          "color": "#a6d96a",
+          "label": "Low"
+        },
+        {
+          "color": "#66bd63",
+          "label": "Moderate"
+        },
+        {
+          "color": "#1a9850",
+          "label": "High"
+        },
+        {
+          "color": "#006837",
+          "label": "Very High"
+        }
+      ]
+    },
+    "landcover": {
+      "key": "landcover",
+      "url": "/overlays/landcover.png",
+      "bounds_wgs84": [
+        [
+          85.74248629086901,
+          20.126759325001633
+        ],
+        [
+          85.91248003734314,
+          20.126759325001633
+        ],
+        [
+          85.91248003734314,
+          20.400481279308913
+        ],
+        [
+          85.74248629086901,
+          20.400481279308913
+        ]
+      ],
+      "vmin": 1,
+      "vmax": 4,
+      "title": "Land Cover",
+      "unit": "class",
+      "group": "LAND COVER",
+      "source": "Sentinel-2 rule-based (NDVI), 10 m",
+      "type": "categorical",
+      "stops": [
+        {
+          "color": "#2c7bb6",
+          "label": "Water"
+        },
+        {
+          "color": "#1a9850",
+          "label": "Vegetation"
+        },
+        {
+          "color": "#d7191c",
+          "label": "Built-up"
+        },
+        {
+          "color": "#fdae61",
+          "label": "Bare Land"
+        }
+      ]
+    },
+    "aqi": {
+      "key": "aqi",
+      "url": "/overlays/aqi.png",
+      "bounds_wgs84": [
+        [
+          85.74270499547698,
+          20.10112565132456
+        ],
+        [
+          85.92236437377768,
+          20.10112565132456
+        ],
+        [
+          85.92236437377768,
+          20.400476196768057
+        ],
+        [
+          85.74270499547698,
+          20.400476196768057
+        ]
+      ],
+      "vmin": 82.20796966552734,
+      "vmax": 107.98687744140625,
+      "title": "Air Quality Index",
+      "unit": "",
+      "group": "AIR QUALITY",
+      "source": "CPCB / OpenAQ / Sentinel-5P interpolation, 1 km",
+      "type": "continuous"
+    },
+    "pm25": {
+      "key": "pm25",
+      "url": "/overlays/pm25.png",
+      "bounds_wgs84": [
+        [
+          85.74270499547698,
+          20.10112565132456
+        ],
+        [
+          85.92236437377768,
+          20.10112565132456
+        ],
+        [
+          85.92236437377768,
+          20.400476196768057
+        ],
+        [
+          85.74270499547698,
+          20.400476196768057
+        ]
+      ],
+      "vmin": 47.68269729614258,
+      "vmax": 56.487613677978516,
+      "title": "PM2.5 (\u00b5g/m\u00b3)",
+      "unit": "",
+      "group": "AIR QUALITY",
+      "source": "CPCB / OpenAQ / Sentinel-5P interpolation, 1 km",
+      "type": "continuous"
+    },
+    "pm10": {
+      "key": "pm10",
+      "url": "/overlays/pm10.png",
+      "bounds_wgs84": [
+        [
+          85.74270499547698,
+          20.10112565132456
+        ],
+        [
+          85.92236437377768,
+          20.10112565132456
+        ],
+        [
+          85.92236437377768,
+          20.400476196768057
+        ],
+        [
+          85.74270499547698,
+          20.400476196768057
+        ]
+      ],
+      "vmin": 95.12993621826172,
+      "vmax": 111.51560974121094,
+      "title": "PM10 (\u00b5g/m\u00b3)",
+      "unit": "",
+      "group": "AIR QUALITY",
+      "source": "CPCB / OpenAQ / Sentinel-5P interpolation, 1 km",
+      "type": "continuous"
+    },
+    "no2": {
+      "key": "no2",
+      "url": "/overlays/no2.png",
+      "bounds_wgs84": [
+        [
+          85.74270499547698,
+          20.10112565132456
+        ],
+        [
+          85.92236437377768,
+          20.10112565132456
+        ],
+        [
+          85.92236437377768,
+          20.400476196768057
+        ],
+        [
+          85.74270499547698,
+          20.400476196768057
+        ]
+      ],
+      "vmin": 33.1901741027832,
+      "vmax": 39.90690231323242,
+      "title": "NO\u2082 (\u00b5g/m\u00b3)",
+      "unit": "",
+      "group": "AIR QUALITY",
+      "source": "CPCB / OpenAQ / Sentinel-5P interpolation, 1 km",
+      "type": "continuous"
+    },
+    "so2": {
+      "key": "so2",
+      "url": "/overlays/so2.png",
+      "bounds_wgs84": [
+        [
+          85.74270499547698,
+          20.10112565132456
+        ],
+        [
+          85.92236437377768,
+          20.10112565132456
+        ],
+        [
+          85.92236437377768,
+          20.400476196768057
+        ],
+        [
+          85.74270499547698,
+          20.400476196768057
+        ]
+      ],
+      "vmin": 15.425548553466797,
+      "vmax": 17.811660766601562,
+      "title": "SO\u2082 (\u00b5g/m\u00b3)",
+      "unit": "",
+      "group": "AIR QUALITY",
+      "source": "CPCB / OpenAQ / Sentinel-5P interpolation, 1 km",
+      "type": "continuous"
+    },
+    "o3": {
+      "key": "o3",
+      "url": "/overlays/o3.png",
+      "bounds_wgs84": [
+        [
+          85.74270499547698,
+          20.10112565132456
+        ],
+        [
+          85.92236437377768,
+          20.10112565132456
+        ],
+        [
+          85.92236437377768,
+          20.400476196768057
+        ],
+        [
+          85.74270499547698,
+          20.400476196768057
+        ]
+      ],
+      "vmin": 41.61174392700195,
+      "vmax": 48.07843780517578,
+      "title": "O\u2083 (\u00b5g/m\u00b3)",
+      "unit": "",
+      "group": "AIR QUALITY",
+      "source": "CPCB / OpenAQ / Sentinel-5P interpolation, 1 km",
+      "type": "continuous"
+    },
+    "co": {
+      "key": "co",
+      "url": "/overlays/co.png",
+      "bounds_wgs84": [
+        [
+          85.74270499547698,
+          20.10112565132456
+        ],
+        [
+          85.92236437377768,
+          20.10112565132456
+        ],
+        [
+          85.92236437377768,
+          20.400476196768057
+        ],
+        [
+          85.74270499547698,
+          20.400476196768057
+        ]
+      ],
+      "vmin": 763.9817504882812,
+      "vmax": 818.9567260742188,
+      "title": "CO (mg/m\u00b3)",
+      "unit": "",
+      "group": "AIR QUALITY",
+      "source": "CPCB / OpenAQ / Sentinel-5P interpolation, 1 km",
+      "type": "continuous"
+    },
+    "elevation": {
+      "key": "elevation",
+      "url": "/overlays/elevation.png",
+      "bounds_wgs84": [
+        [
+          85.74236111111112,
+          20.127916666666664
+        ],
+        [
+          85.91263888888889,
+          20.127916666666664
+        ],
+        [
+          85.91263888888889,
+          20.399305555555554
+        ],
+        [
+          85.74236111111112,
+          20.399305555555554
+        ]
+      ],
+      "vmin": 8.442001342773438,
+      "vmax": 73.61408996582031,
+      "title": "Elevation (DEM)",
+      "unit": "m",
+      "group": "TERRAIN",
+      "source": "Copernicus DEM GLO-30 / SRTM, 30 m",
+      "type": "continuous"
+    },
+    "slope": {
+      "key": "slope",
+      "url": "/overlays/slope.png",
+      "bounds_wgs84": [
+        [
+          85.74236111111112,
+          20.127916666666664
+        ],
+        [
+          85.91263888888889,
+          20.127916666666664
+        ],
+        [
+          85.91263888888889,
+          20.399305555555554
+        ],
+        [
+          85.74236111111112,
+          20.399305555555554
+        ]
+      ],
+      "vmin": 0.05183102563023567,
+      "vmax": 6.779984474182129,
+      "title": "Slope",
+      "unit": "\u00b0",
+      "group": "TERRAIN",
+      "source": "DEM derivative (Horn 1981), 30 m",
+      "type": "continuous"
+    },
+    "aspect": {
+      "key": "aspect",
+      "url": "/overlays/aspect.png",
+      "bounds_wgs84": [
+        [
+          85.74236111111112,
+          20.127916666666664
+        ],
+        [
+          85.91263888888889,
+          20.127916666666664
+        ],
+        [
+          85.91263888888889,
+          20.399305555555554
+        ],
+        [
+          85.74236111111112,
+          20.399305555555554
+        ]
+      ],
+      "vmin": 0,
+      "vmax": 360,
+      "title": "Aspect",
+      "unit": "\u00b0",
+      "group": "TERRAIN",
+      "source": "DEM derivative, 30 m",
+      "type": "categorical"
+    },
+    "hillshade": {
+      "key": "hillshade",
+      "url": "/overlays/hillshade.png",
+      "bounds_wgs84": [
+        [
+          85.74236111111112,
+          20.127916666666664
+        ],
+        [
+          85.91263888888889,
+          20.127916666666664
+        ],
+        [
+          85.91263888888889,
+          20.399305555555554
+        ],
+        [
+          85.74236111111112,
+          20.399305555555554
+        ]
+      ],
+      "vmin": 0,
+      "vmax": 255,
+      "title": "Hillshade",
+      "unit": "illumination",
+      "group": "TERRAIN",
+      "source": "DEM derivative, 30 m",
+      "type": "continuous"
+    }
+  }
+}

@@ -1,0 +1,49 @@
+# Git
+.git
+.gitignore
+.github
+
+# Python
+.venv
+venv
+env
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.ruff_cache
+.mypy_cache
+
+# Node / frontend
+node_modules
+frontend/node_modules
+frontend/dist
+
+# Logs
+*.log
+logs
+backend/logs
+
+# Local environment
+.env
+.env.*
+!.env.example
+
+# Large runtime artifacts
+data/
+models/
+
+# Local database
+postgres_data/
+
+# IDE
+.vscode
+.idea
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+tmp/
+temp/

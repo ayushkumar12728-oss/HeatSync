@@ -1,0 +1,2754 @@
+================================================================================
+ HEATSYNC - HYPERLOCAL URBAN HEAT & AIR QUALITY DIGITAL TWIN
+ FULL INSTALLATION AND SETUP MANUAL
+ (Urban Digital Twin - Bhubaneswar)
+================================================================================
+
+This manual was written against the ACTUAL repository (the folder you have on
+disk, e.g. F:\urban-digital-twin). Every command, file path, port, endpoint
+and setting below was checked against the repository files before this guide
+was written. Where something could not be verified from the repository, the
+guide says "VERIFY IN YOUR ENVIRONMENT" instead of inventing an answer.
+
+Target audience: a developer on a fresh Windows 10/11 computer who has never
+seen this project, has limited Docker / Python / Node.js experience, and wants
+to run the complete system locally. All commands are written for PowerShell.
+Where the repository's own documentation uses bash or `make`, the equivalent
+PowerShell command is given here.
+
+Nothing in this manual modifies, redesigns, removes or retrains anything in
+the project. It is documentation only.
+
+
+--------------------------------------------------------------------------------
+ TABLE OF CONTENTS
+--------------------------------------------------------------------------------
+  1.  How to use this guide
+  2.  What you are installing (project overview)
+  3.  System architecture
+  4.  Folder-by-folder explanation
+  5.  System requirements
+  6.  Install the required software
+  7.  Get the project files (clone / copy)
+  8.  Create the Python environment
+  9.  Install the frontend dependencies (Node.js / npm)
+ 10.  Environment variables (complete reference)
+ 11.  Docker setup
+ 12.  Database setup (PostgreSQL / PostGIS - optional)
+ 13.  GIS data (what datasets exist and where)
+ 14.  The trained model
+ 15.  The GIS pipeline
+ 16.  The AI pipeline (XGBoost / SHAP / Nemotron)
+ 17.  QUICK START - COMPLETE APPLICATION
+ 18.  Local development mode (without Docker)
+ 19.  API verification (endpoint reference + PowerShell commands)
+ 20.  Testing the model (single / batch / scenario / cells / GeoJSON)
+ 21.  Testing the 3D map (manual browser checklist)
+ 22.  The search system
+ 23.  The scenario system
+ 24.  Performance notes
+ 25.  Installing from GitHub (what is and is not committed)
+ 26.  Windows troubleshooting
+ 27.  Health checks (API vs Docker container)
+ 28.  Security
+ 29.  Backup and restoration
+ 30.  Complete verification checklist
+ 31.  Exact ports
+ 32.  Directory structure
+ 33.  The "one command" startup
+ 34.  Verified facts and accuracy notes
+
+
+--------------------------------------------------------------------------------
+ 1. HOW TO USE THIS GUIDE
+--------------------------------------------------------------------------------
+
+Follow the sections IN ORDER the first time:
+
+  1. Read section 5 (requirements) and install the software in section 6.
+  2. Get the project files (section 7).
+  3. Create the Python environment (section 8).
+  4. Install the frontend dependencies (section 9).
+  5. Configure the .env files (section 10).
+  6. Start the system (section 17 - QUICK START).
+  7. Verify everything (sections 19-21, 30).
+
+If something does not work, jump to section 26 (troubleshooting).
+
+Conventions used in this manual:
+
+  COMMAND:
+  > type-the-command-here
+
+  WHERE:
+  > The place where the command must be typed (always "PowerShell" unless
+    stated otherwise - e.g. "PowerShell, inside the frontend folder").
+
+  PURPOSE:
+  > What the command does and why it is needed.
+
+  EXPECTED OUTPUT:
+  > What you should see if the command worked.
+
+
+--------------------------------------------------------------------------------
+ 2. WHAT YOU ARE INSTALLING (PROJECT OVERVIEW)
+--------------------------------------------------------------------------------
+
+The project is an AI-powered Urban Digital Twin for monitoring, predicting
+and simulating Urban Heat Island (UHI) effects in Bhubaneswar, Odisha, India.
+It takes raw satellite imagery and open data, turns them into a 100 m
+prediction grid, trains an XGBoost machine-learning model that predicts land
+surface temperature (LST), and serves the results through a web dashboard
+called "HeatSync".
+
+The complete system has four runtime pieces:
+
+  1. BACKEND API  - a FastAPI (Python) service on port 8000. It serves the
+     trained model, predictions, scenarios, GIS layers, monitoring reports and
+     the optional AI (Nemotron) explanations. It can run two ways:
+        (a) with Docker (docker compose)  - recommended, easiest
+        (b) directly from a Python virtual environment - local mode
+  2. FRONTEND     - a React + Vite web dashboard on port 5173 (development).
+     It is the 3D map + analytics + scenario simulator UI.
+  3. DATABASE     - PostgreSQL with the PostGIS extension (port 5432).
+     OPTIONAL: the API is "artifact-first" and works without a database.
+  4. DATA + MODEL - the pipeline outputs (data/) and the trained model
+     (models/best_model.pkl). These already exist in the repository folder you
+     have (they are NOT stored on GitHub - see section 25).
+
+The important design decision to understand: the backend reads everything from
+files on disk (data/ and models/). The database is an optional extra. This
+means the system can run with only two processes: FastAPI (port 8000) and
+Vite (port 5173).
+
+IMPORTANT: the frontend is NOT part of the docker-compose stack. You always
+start the frontend separately with `npm run dev` (section 9), no matter how
+the backend is started.
+
+
+--------------------------------------------------------------------------------
+ 3. SYSTEM ARCHITECTURE
+--------------------------------------------------------------------------------
+
+The data-flow of the complete system (verified from the source code):
+
+    Browser (HeatSync dashboard)
+        |
+        v
+    React + Vite (frontend/)              port 5173 (dev)
+        |
+        v   /api requests through the Vite dev proxy (vite.config.js)
+            (development) or directly to VITE_BACKEND_API_URL (production)
+        v
+    FastAPI backend (backend/)            port 8000
+        |
+        +--- XGBoost model (models/best_model.pkl)  - LST prediction
+        +--- GIS engine outputs (data/processed, data/raw/osm) - map layers
+        +--- Scenario engine (ai-engine scenario simulator) - "what-if" runs
+        +--- AI / Nemotron (NVIDIA NIM, OpenAI-compatible) - explanations
+        +--- PostgreSQL / PostGIS (database/) - OPTIONAL PostGIS mode
+        +--- GIS datasets (data/, frontend/public/) - layers, overlays, DEM
+
+Layers of the stack in one line:
+
+    Browser -> React + Vite -> Vite /api proxy -> FastAPI
+        -> XGBoost model | GIS engine | Scenario engine | AI/Nemotron
+        -> PostgreSQL/PostGIS (optional) | GIS datasets
+
+Key facts verified from the code:
+
+  - vite.config.js proxies every `/api` request from the frontend to
+    http://localhost:8000 during development, so the browser never calls the
+    backend directly and CORS is not an issue in development.
+  - In a production build, the frontend uses VITE_BACKEND_API_URL (default
+    http://localhost:8000/api).
+  - The backend (backend/main.py) mounts routers for: health, data,
+    prediction, simulation, explainability, dashboard, monitoring,
+    environment, model, ai, city, routing.
+  - The trained model is loaded lazily on the first prediction request and
+    reused for every later request (backend/services/serving.py).
+
+
+--------------------------------------------------------------------------------
+ 4. FOLDER-BY-FOLDER EXPLANATION
+--------------------------------------------------------------------------------
+
+  frontend/         The HeatSync web dashboard: React 19 + Vite 8 + MapLibre
+                    GL (3D map) + Leaflet + Chart.js. `public/` contains the
+                    browser-safe GIS assets (OSM web layers, PNG overlays,
+                    terrain tiles). `src/services/` contains the API clients.
+
+  backend/          The FastAPI service. `main.py` is the application
+                    factory, `api/` holds the routers, `services/` holds
+                    model serving, simulation, Nemotron, catalog, database,
+                    `config/settings.py` reads the UDT_* environment
+                    variables, `schemas/` defines request/response models.
+
+  ai-engine/        The UHI machine-learning pipeline: leakage detection,
+                    5-fold cross-validation, 6-model comparison, Optuna
+                    hyper-parameter tuning, final XGBoost training, ONNX
+                    export, SHAP explainability, sensitivity scenarios and
+                    full-grid prediction. Entry point: `ai-engine/main.py`.
+
+  gis-engine/       The remote-sensing data pipeline: downloads and processes
+                    Sentinel-2 (NDVI, green cover, vegetation density, land
+                    cover), Landsat 8/9 (LST, heat classes), DEM (elevation,
+                    slope, aspect, hillshade, contours), NASA POWER weather
+                    and air quality (AQI). `feature_engineering/` builds the
+                    100 m ML training grid. Entry point: `gis-engine/main.py`.
+
+  scenario-engine/  A standalone simulation library (tree canopy, cool roofs,
+                    green corridors, comparison) used by the frontend's
+                    microclimate simulator. The API scenario engine actually
+                    delegates to the ai-engine's ScenarioSimulator.
+
+  database/         Optional PostgreSQL/PostGIS schema (`schema/init.sql`),
+                    SQL migrations (`migrations/0001_initial_schema.sql`),
+                    a migration runner (`migrate.py`) and an artifact loader
+                    (`seed/load_artifacts.py`).
+
+  deployment/       Dockerfile (`docker/Dockerfile`), sample nginx reverse
+                    proxy (`nginx/nginx.conf`), environment templates
+                    (`env/`) and a deployment script (`deploy.sh`).
+
+  data/             ALL pipeline outputs: raw downloads, processed rasters,
+                    the 53,802-cell training dataset, predictions and AI
+                    engine reports. This folder is NOT committed to GitHub.
+
+  models/           The trained model: `best_model.pkl` (used for inference)
+                    and `best_model.onnx` (informational). NOT committed.
+
+  tests/            The pytest suite (backend API, serving, end-to-end).
+
+  docs/             Project documentation (this guide lives here too).
+
+  scripts/          Utility scripts (browser test, overlay asset generation,
+                    scenario-cell prewarming). See scripts/README.md.
+
+  docker-compose.yml   The local Docker stack: backend + optional PostGIS.
+  requirements.txt     Python runtime dependencies (backend + engines).
+  requirements-dev.txt Python development dependencies (pytest, ruff, ...).
+  .env.example         Template for the backend environment variables.
+  boundary.geojson     The Bhubaneswar study-area boundary (used by every
+                       pipeline stage and the API).
+  Makefile             Developer shortcuts (requires `make`; optional).
+
+
+--------------------------------------------------------------------------------
+ 5. SYSTEM REQUIREMENTS
+--------------------------------------------------------------------------------
+
+These are the ACTUAL requirements, derived from the repository (Dockerfile,
+docker-compose.yml, requirements.txt, package.json, README.md and the
+installed packages). Versions that the repository does not pin are marked
+"VERIFY IN YOUR ENVIRONMENT" - install the recommended version and confirm.
+
+REQUIRED (you cannot run the system without these):
+
+  - Windows 10 or 11 (64-bit)
+  - Python 3.11 or newer
+      * The backend Docker image is built FROM python:3.11-slim.
+      * docs/setup.md says: "Developed on 3.11; verified on 3.14".
+      * The environment on the machine where this guide was written used
+        Python 3.14.6 and the full dependency set installed and ran fine.
+      * Recommendation: Python 3.11 or 3.12 (matches the Docker image); 3.13
+        or 3.14 also work. Do not use Python 3.9 or older.
+  - Node.js and npm
+      * README.md says Node v18+ / npm v9+.
+      * BUT the pinned Vite 8.2.x declares "engines": node "^20.19.0 ||
+        >=22.12.0" (checked in frontend/node_modules/vite/package.json).
+        So the REAL minimum for this repository is Node 20.19+ (or 22.12+).
+      * Recommendation: install the current Node.js LTS (22.x) or Node 24.x,
+        which satisfies both the README and Vite. The machine where this
+        guide was written used Node v24.18.0 with npm 11.4.2.
+  - Git (to clone / update the repository)
+  - Docker Desktop with the WSL2 backend - REQUIRED for the docker compose
+    path (section 11). If you choose the local Python mode (section 18) you
+    do not need Docker, but the QUICK START in section 17 uses Docker.
+  - An internet connection for the first-time installs (Python packages, npm
+    packages, Docker images) and for the optional live data sources.
+  - Disk space: at least 10 GB free. The full data/ folder in this repository
+    is roughly 1.2 GB, the Python environment ~1-2 GB, node_modules ~0.5 GB,
+    and Docker images ~2-3 GB.
+  - A modern browser: Chrome, Edge or Firefox (the 3D map uses WebGL via
+    MapLibre GL; enable hardware acceleration).
+
+RECOMMENDED (not strictly required, but the pipeline is much more pleasant):
+
+  - 8 GB RAM minimum, 16 GB recommended. Training XGBoost on 53,802 rows is
+    the heaviest step; the machine where this guide was written used 16 GB.
+  - A multi-core CPU (the AI engine uses n_jobs = number of cores - 1).
+  - Windows Terminal (nicer than the old console, same commands).
+  - Git for Windows (comes with Git Bash, useful for the Makefile targets).
+
+OPTIONAL:
+
+  - A CUDA-capable NVIDIA GPU - XGBoost uses the GPU automatically when one
+    is available; set AIE_NO_GPU=true in .env to force CPU training.
+  - PostgreSQL 14+ with PostGIS installed natively - only if you want the
+    database mode without Docker.
+  - conda / miniconda - only if `pip install rasterio geopandas` fails on
+    Windows (see section 8, GDAL note).
+  - WSL2 - required by Docker Desktop on Windows; Docker Desktop installs it
+    for you. Also useful for running the Makefile targets.
+
+Verify your installed versions with (see section 6 for details):
+
+    python --version
+    node --version
+    npm --version
+    git --version
+    docker --version
+    docker compose version
+
+
+--------------------------------------------------------------------------------
+ 6. INSTALL THE REQUIRED SOFTWARE
+--------------------------------------------------------------------------------
+
+Install these in order. Each subsection gives the official install method,
+how to verify, and the common errors.
+
+--------------------------------------------------------------------------------
+ 6.1 Git
+--------------------------------------------------------------------------------
+Official source: https://git-scm.com/download/win
+
+COMMAND:
+> winget install --id Git.Git -e --source winget
+(or download the installer from git-scm.com and click through it)
+
+WHERE:
+> PowerShell (run as normal user; winget is built into Windows 10/11)
+
+PURPOSE:
+> Installs Git, needed to clone the repository and (later) update it.
+
+VERIFY:
+COMMAND:
+> git --version
+EXPECTED OUTPUT:
+> git version 2.xx.x.windows.x
+
+COMMON ERRORS:
+  - "'git' is not recognized as the name of a cmdlet..."
+    CAUSE: Git not installed or not on PATH. Reinstall and tick
+    "Add Git to PATH" / restart PowerShell.
+
+--------------------------------------------------------------------------------
+ 6.2 Python
+--------------------------------------------------------------------------------
+Official source: https://www.python.org/downloads/windows/
+
+COMMAND:
+> winget install --id Python.Python.3.12 -e --source winget
+(or download the installer from python.org)
+
+WHERE:
+> PowerShell
+
+PURPOSE:
+> Python runs the FastAPI backend and the GIS / AI / scenario engines.
+
+IMPORTANT (two Windows gotchas):
+  1. During the python.org installer, tick "Add python.exe to PATH".
+  2. If you type `python` and the Microsoft Store opens, you hit the Windows
+     "App execution alias". Disable it: Settings -> Apps -> Advanced app
+     settings -> App execution aliases -> turn off "python.exe" / "python3.exe".
+
+VERIFY:
+COMMAND:
+> python --version
+EXPECTED OUTPUT:
+> Python 3.12.x
+
+If `python` is not on PATH but the `py` launcher is, use:
+
+COMMAND:
+> py -3.12 --version
+> py -3.12 -m venv ...   (use "py -3.12 -m venv" instead of "python -m venv")
+
+COMMON ERRORS:
+  - "Python was not found; run without arguments to install from the
+    Microsoft Store"  ->  Store alias problem, see IMPORTANT above.
+  - "'python' is not recognized..." -> not on PATH; reinstall with the
+    "Add to PATH" option and restart PowerShell.
+
+--------------------------------------------------------------------------------
+ 6.3 Node.js and npm
+--------------------------------------------------------------------------------
+Official source: https://nodejs.org/en/download (the "LTS" button)
+
+COMMAND:
+> winget install --id OpenJS.NodeJS.LTS -e --source winget
+
+WHERE:
+> PowerShell
+
+PURPOSE:
+> Node.js runs Vite (the frontend dev server and build). npm is the package
+> manager that installs the frontend dependencies. As explained in section 5,
+> the pinned Vite 8 requires Node 20.19+ or 22.12+, so install a recent LTS.
+
+VERIFY:
+COMMAND:
+> node --version
+EXPECTED OUTPUT:
+> v22.x.x   (or v24.x.x)
+
+COMMAND:
+> npm --version
+EXPECTED OUTPUT:
+> 10.x.x or 11.x.x   (npm 11.4.2 was used on the reference machine)
+
+COMMON ERRORS:
+  - "'node' is not recognized..." -> install again and restart PowerShell.
+  - "npm : The term 'npm' is not recognized..." -> Node.js install failed or
+    the PATH was not refreshed; restart PowerShell.
+
+--------------------------------------------------------------------------------
+ 6.4 Docker Desktop (needed for the Docker path)
+--------------------------------------------------------------------------------
+Official source: https://www.docker.com/products/docker-desktop/
+
+COMMAND:
+> winget install --id Docker.DockerDesktop -e --source winget
+
+WHERE:
+> PowerShell
+
+PURPOSE:
+> Docker Desktop provides Docker Engine + Docker Compose on Windows. It runs
+> Linux containers through WSL2. This project's docker-compose.yml starts the
+> FastAPI backend and the PostGIS database in containers.
+
+After installation:
+  - Launch "Docker Desktop" from the Start menu once, accept the license and
+    finish the setup wizard (it installs/configures WSL2 if needed - see 6.5).
+  - Wait until the whale icon in the system tray shows "Engine running".
+
+VERIFY:
+COMMAND:
+> docker --version
+EXPECTED OUTPUT:
+> Docker version 2x.x.x, build xxxxxx
+
+COMMAND:
+> docker compose version
+EXPECTED OUTPUT:
+> Docker Compose version v2.x.x   (v5.3.1 on the reference machine)
+
+COMMON ERRORS:
+  - "'docker' is not recognized..." -> Docker Desktop is not installed, or
+    the PATH entry is missing; restart PowerShell after install.
+  - "error during connect: This error may indicate that the docker daemon is
+    not running" -> Docker Desktop is installed but not started. Start it
+    from the Start menu and wait for "Engine running".
+  - WSL errors during install -> see 6.5.
+
+--------------------------------------------------------------------------------
+ 6.5 WSL2 (required by Docker Desktop)
+--------------------------------------------------------------------------------
+Official source: built into Windows (Microsoft Store "Windows Subsystem for
+Linux" or the `wsl --install` command).
+
+COMMAND:
+> wsl --install
+
+WHERE:
+> PowerShell (Administrator)
+
+PURPOSE:
+> Installs the Windows Subsystem for Linux and sets WSL2 as the default
+> version. Docker Desktop uses WSL2 as its Linux backend. If Docker Desktop
+> already installed WSL2 for you, this step is already done.
+
+VERIFY:
+COMMAND:
+> wsl --status
+EXPECTED OUTPUT:
+> Default Version: 2   (and a line about the default distro)
+
+If it shows "Default Version: 1", fix with:
+
+COMMAND:
+> wsl --set-default-version 2
+
+COMMON ERRORS:
+  - "WSL 2 requires an update to its kernel component" -> run `wsl --update`
+    (as Administrator), then restart.
+  - Virtualisation is not enabled in the BIOS -> enable "Intel VT-x" /
+    "AMD-V" in the firmware settings, or enable "Virtual Machine Platform"
+    in Windows Features, then reboot.
+
+--------------------------------------------------------------------------------
+ 6.6 (Optional) Anything else?
+--------------------------------------------------------------------------------
+The repository does NOT require any other global software. PostgreSQL/PostGIS
+are only needed if you want the optional database mode, and the project gives
+you a Docker image for that (section 12) - no native install needed.
+
+
+--------------------------------------------------------------------------------
+ 7. GET THE PROJECT FILES (CLONE / COPY)
+--------------------------------------------------------------------------------
+
+You already have the project folder (e.g. F:\urban-digital-twin). Two cases:
+
+CASE A - you downloaded the repository folder / zip (typical for this project
+because it ships with data and the trained model):
+  1. Extract the zip (if needed) so that the top-level folder contains
+     docker-compose.yml, README.md, backend/, frontend/, etc.
+  2. Move it somewhere convenient, e.g. F:\urban-digital-twin.
+
+CASE B - you want to clone from GitHub:
+  1. Find the repository URL (the GitHub page shows it under "Code").
+  2. Run the commands below, replacing YOUR_REPO_URL with the real URL.
+
+COMMAND:
+> cd F:\
+> git clone YOUR_REPO_URL urban-digital-twin
+
+WHERE:
+> PowerShell
+
+PURPOSE:
+> Downloads the source code. IMPORTANT: a fresh GitHub clone does NOT contain
+> the large pipeline outputs (data/) or the trained model (models/) - they
+> are gitignored. See section 25 for what you must do in that case.
+
+Then move into the project root:
+
+COMMAND:
+> cd F:\urban-digital-twin
+
+WHERE:
+> PowerShell
+
+PURPOSE:
+> Makes the project root the current directory. EVERY other command in this
+> guide assumes you are in this folder unless a different folder is stated.
+
+VERIFY you are in the right place:
+
+COMMAND:
+> dir
+
+WHERE:
+> PowerShell, in the project root
+
+EXPECTED OUTPUT (top-level entries of this repository):
+    .env.example        docker-compose.yml   Makefile
+    README.md           boundary.geojson     scenario.geojson
+    requirements.txt    requirements-dev.txt
+    ai-engine/          backend/             data/
+    database/           deployment/          docs/
+    frontend/           gis-engine/          models/
+    scenario-engine/    scripts/             tests/
+
+(If data/ or models/ are missing, you have a fresh GitHub clone - read
+section 25 before continuing.)
+
+Quick self-check: you are in the right directory when `dir` shows
+docker-compose.yml AND backend AND frontend in the same listing.
+
+
+--------------------------------------------------------------------------------
+ 8. CREATE THE PYTHON ENVIRONMENT
+--------------------------------------------------------------------------------
+
+The project uses a virtual environment named `.venv` in the project root.
+A `.venv` folder already exists on the reference machine; on a fresh machine
+you create it yourself.
+
+--------------------------------------------------------------------------------
+ 8.1 Create the virtual environment
+--------------------------------------------------------------------------------
+COMMAND:
+> python -m venv --system-site-packages .venv
+
+WHERE:
+> PowerShell, in the project root (F:\urban-digital-twin)
+
+PURPOSE:
+> Creates an isolated Python environment inside the project folder so the
+> project's packages never conflict with other Python programs on your
+> computer. `--system-site-packages` lets the environment reuse any
+> geospatial wheels already installed on the system - recommended on
+> Windows, and it matches what the project's Makefile does.
+
+EXPECTED OUTPUT:
+> (no output on success; the folder .venv\ appears)
+
+--------------------------------------------------------------------------------
+ 8.2 Activate the environment
+--------------------------------------------------------------------------------
+COMMAND:
+> .\.venv\Scripts\Activate.ps1
+
+WHERE:
+> PowerShell, in the project root
+
+PURPOSE:
+> Switches the current PowerShell session to use the .venv Python. After
+> activation your prompt shows a (.venv) prefix.
+
+POSSIBLE PROBLEM - PowerShell execution policy:
+If you see an error like:
+    "...cannot be loaded because running scripts is disabled on this system."
+Fix it (one time, safe):
+
+COMMAND:
+> Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+
+WHERE:
+> PowerShell
+
+PURPOSE:
+> Allows locally-created scripts (like Activate.ps1) to run in your user
+> account without changing system-wide security.
+
+VERIFY the environment is active:
+COMMAND:
+> python --version
+EXPECTED OUTPUT:
+> Python 3.11.x (or newer)
+
+If you prefer not to change the execution policy, you can run every Python
+command with the explicit interpreter path instead of activating:
+
+COMMAND:
+> .\.venv\Scripts\python.exe --version
+
+(All commands in this guide that say `python ...` assume the environment is
+activated. Replace `python` with `.\.venv\Scripts\python.exe` if you did not
+activate.)
+
+--------------------------------------------------------------------------------
+ 8.3 Upgrade pip
+--------------------------------------------------------------------------------
+COMMAND:
+> python -m pip install --upgrade pip
+
+WHERE:
+> PowerShell, .venv activated, project root
+
+PURPOSE:
+> Ensures the package installer is current before installing dependencies.
+
+--------------------------------------------------------------------------------
+ 8.4 Install the Python dependencies
+--------------------------------------------------------------------------------
+The repository defines exactly two requirement files:
+
+  requirements.txt       - everything needed to RUN the backend and the
+                           engines (FastAPI, XGBoost, geopandas, rasterio,
+                           SHAP, onnx, sqlalchemy, ...).
+  requirements-dev.txt   - development/test tools: pytest, pytest-cov,
+                           httpx, ruff. It starts with `-r requirements.txt`,
+                           so installing it also installs the runtime deps.
+
+COMMAND:
+> pip install -r requirements.txt
+
+WHERE:
+> PowerShell, .venv activated, project root
+
+PURPOSE:
+> Installs the runtime dependencies listed in the repository's
+> requirements.txt. This can take several minutes - that is normal.
+
+EXPECTED OUTPUT:
+> ... Successfully installed fastapi-x.y.z xgboost-a.b.c ... (long list)
+
+COMMAND (optional but recommended for development):
+> pip install -r requirements-dev.txt
+
+WHERE:
+> PowerShell, .venv activated, project root
+
+PURPOSE:
+> Installs pytest, pytest-cov, httpx and ruff (the test and lint tools used
+> by `make test` / `make lint` and section 30's checklist).
+
+GDAL / rasterio note (Windows):
+  requirements.txt says "gdal must be installed from the OS package manager
+  on Windows/Linux (see docs/setup.md)". In practice rasterio and geopandas
+  install fine from pip on modern Windows because they ship prebuilt wheels.
+  If `pip install rasterio` or `pip install geopandas` FAILS, use the
+  conda-forge route documented in docs/setup.md:
+      conda create -n udt python=3.11
+      conda activate udt
+      conda install -c conda-forge gdal rasterio geopandas
+      pip install -r requirements.txt
+
+VERIFY the environment works:
+COMMAND:
+> python -c "import fastapi, uvicorn, xgboost, joblib, pandas, numpy; print('backend imports OK')"
+EXPECTED OUTPUT:
+> backend imports OK
+
+(Optional, checks the geospatial stack too:
+> python -c "import geopandas, rasterio, shapely; print('geo imports OK')")
+
+To leave the environment later:
+COMMAND:
+> deactivate
+
+Do NOT install random extra packages. Everything the project imports is
+already covered by requirements.txt / requirements-dev.txt.
+
+
+--------------------------------------------------------------------------------
+ 9. INSTALL THE FRONTEND DEPENDENCIES (NODE.JS / NPM)
+--------------------------------------------------------------------------------
+
+The frontend (frontend/) is a separate npm project. Its package.json scripts
+are: dev (Vite dev server), build (production build), lint (oxlint) and
+preview (serve the built files).
+
+--------------------------------------------------------------------------------
+ 9.1 Install dependencies
+--------------------------------------------------------------------------------
+COMMAND:
+> cd frontend
+
+WHERE:
+> PowerShell, from the project root
+
+PURPOSE:
+> Moves into the frontend folder where package.json lives. You must run npm
+> commands from this folder.
+
+COMMAND:
+> npm install
+
+WHERE:
+> PowerShell, inside frontend\
+
+PURPOSE:
+> Reads package.json + package-lock.json and downloads every frontend
+> dependency (React, Vite, MapLibre GL, Leaflet, Chart.js, ...) into
+> frontend\node_modules\. This takes a few minutes the first time.
+
+EXPECTED OUTPUT:
+> added NNN packages ... (a summary line)
+
+COMMON ERRORS:
+  - "ENOENT: no such file or directory, open '...package.json'" -> you are in
+    the wrong folder; you must be inside frontend\.
+  - npm SSL / proxy errors -> corporate network; see section 26.
+
+--------------------------------------------------------------------------------
+ 9.2 The frontend commands
+--------------------------------------------------------------------------------
+DEV SERVER (for day-to-day development):
+COMMAND:
+> npm run dev
+WHERE:
+> PowerShell, inside frontend\
+PURPOSE:
+> Starts the Vite development server. The app becomes available at
+> http://localhost:5173 (Vite's default port - vite.config.js does not set a
+> custom port). The dev server also proxies /api requests to the backend at
+> http://localhost:8000 automatically (vite.config.js), so the frontend can
+> talk to the backend without CORS problems.
+EXPECTED OUTPUT:
+>   VITE v8.x.x  ready in xxx ms
+>   Local:   http://localhost:5173/
+KEEP THIS WINDOW OPEN - closing it stops the frontend. Press Ctrl+C to stop.
+
+PRODUCTION BUILD (creates a static site in frontend\dist\):
+COMMAND:
+> npm run build
+WHERE:
+> PowerShell, inside frontend\
+PURPOSE:
+> Compiles the React app into optimized static files in frontend\dist\.
+> Used for deployment behind nginx (see deployment/nginx/nginx.conf).
+EXPECTED OUTPUT:
+>   dist/index.html  ... (list of built files)
+
+LINT:
+COMMAND:
+> npm run lint
+WHERE:
+> PowerShell, inside frontend\
+PURPOSE:
+> Runs oxlint (this project's linter - note it is NOT eslint) over the
+> frontend source and reports problems.
+EXPECTED OUTPUT:
+> "Found 0 warnings and 0 errors" (or a list of issues to fix)
+
+PREVIEW (serve the production build locally):
+COMMAND:
+> npm run preview
+WHERE:
+> PowerShell, inside frontend\
+PURPOSE:
+> Serves frontend\dist\ so you can check the production build. Vite's
+> default preview port is 4173 - VERIFY IN YOUR ENVIRONMENT.
+> NOTE: in preview mode the /api proxy does NOT apply; the build calls
+> VITE_BACKEND_API_URL (default http://localhost:8000/api) instead.
+
+
+--------------------------------------------------------------------------------
+ 10. ENVIRONMENT VARIABLES (COMPLETE REFERENCE)
+--------------------------------------------------------------------------------
+
+There are TWO environment files in this project:
+
+  ROOT .env        - read by the backend (backend/config/settings.py) and by
+                     the pipelines. Template: .env.example (repo root).
+  frontend\.env    - read by Vite at build/dev time. Template:
+                     frontend\.env.example.
+
+NEITHER file is committed to Git (.env is in .gitignore). Create both by
+copying their templates:
+
+COMMAND:
+> Copy-Item .env.example .env
+> Copy-Item frontend\.env.example frontend\.env
+
+WHERE:
+> PowerShell, in the project root
+
+PURPOSE:
+> Creates real .env files from the templates. Both are optional to run the
+> system with defaults - but creating them makes future changes easy.
+
+--------------------------------------------------------------------------------
+ 10.1 Backend variables (root .env) - all read via the UDT_ prefix
+--------------------------------------------------------------------------------
+The backend reads settings from environment variables prefixed with UDT_
+(backend/config/settings.py). It also reads the .env file at the project
+root. All of these are OPTIONAL - the defaults match the standard layout.
+
+NAME: UDT_APP_NAME
+PURPOSE: Display name of the API (used in /api/health and the root page).
+REQUIRED: No (default "Urban Digital Twin API")
+WHERE: root .env
+EXAMPLE FORMAT: UDT_APP_NAME=Urban Digital Twin API
+SECURITY: none - public display string
+
+NAME: UDT_VERSION
+PURPOSE: API version string.
+REQUIRED: No (default "1.0.0")
+WHERE: root .env
+EXAMPLE FORMAT: UDT_VERSION=1.0.0
+
+NAME: UDT_DEBUG
+PURPOSE: When true, enables FastAPI debug mode and disables the file log.
+REQUIRED: No (default false)
+WHERE: root .env
+EXAMPLE FORMAT: UDT_DEBUG=false
+SECURITY: keep false in production (debug exposes internals)
+
+NAME: UDT_LOG_LEVEL
+PURPOSE: Logging verbosity (DEBUG/INFO/WARNING/ERROR).
+REQUIRED: No (default INFO)
+WHERE: root .env
+EXAMPLE FORMAT: UDT_LOG_LEVEL=INFO
+
+NAME: UDT_CORS_ORIGINS
+PURPOSE: JSON array of allowed browser origins for cross-origin API calls.
+REQUIRED: No (default ["http://localhost:3000","http://127.0.0.1:3000"]).
+         In development the Vite proxy makes CORS irrelevant; set it when
+         you call the API from another origin (e.g. a production frontend).
+WHERE: root .env
+EXAMPLE FORMAT: UDT_CORS_ORIGINS=["http://localhost:3000","http://localhost:5173"]
+SECURITY: only list origins you actually serve.
+
+NAME: UDT_DATABASE_URL
+PURPOSE: Optional PostgreSQL/PostGIS connection string. When set, the API
+         enables PostGIS-backed read access (backend/services/database.py).
+         When EMPTY (recommended default), the API runs in artifact-first
+         mode and reads everything from disk.
+REQUIRED: No
+WHERE: root .env
+EXAMPLE FORMAT: UDT_DATABASE_URL=postgresql://admin:password@localhost:5432/urban_digital_twin
+SECURITY: contains the database password - never commit .env.
+
+NAME: UDT_MODEL_PKL / UDT_LEAKAGE_REPORT / UDT_DATASET_CSV
+PURPOSE: Override the artifact locations if you moved the outputs.
+REQUIRED: No (defaults: models/best_model.pkl,
+         data/outputs/reports/leakage_report.json,
+         data/feature_engineering/training_dataset.csv)
+WHERE: root .env
+EXAMPLE FORMAT: UDT_MODEL_PKL=models/best_model.pkl
+
+COMPOSE-SPECIFIC variables (read by docker-compose.yml, not by the app):
+  POSTGRES_DB       (default urban_digital_twin) - database name
+  POSTGRES_USER     (default admin)              - database user
+  POSTGRES_PASSWORD (default password)           - database password
+  POSTGRES_PORT     (default 5432)               - host port for PostGIS
+  API_PORT          (default 8000)               - host port for the backend
+  UDT_CORS_ORIGINS / UDT_LOG_LEVEL / UDT_DATABASE_URL - passed into the
+  backend container as environment variables.
+
+PIPELINE variables (read by gis-engine/config.py, all optional):
+  MAX_CLOUD_COVER=10            max cloud % for satellite scene search
+  S2_LOOKBACK_DAYS=365          Sentinel-2 search window (days)
+  CDSE_CLIENT_ID=               Copernicus Data Space client id (fallback
+                                provider - optional)
+  CDSE_CLIENT_SECRET=           Copernicus Data Space client secret
+  OPENAQ_API_KEY=               OpenAQ v3 key for air quality (optional)
+  OPENTOPOGRAPHY_API_KEY=       SRTM fallback key (Copernicus DEM is the
+                                default and needs no key)
+SECURITY: these are account credentials - keep them in .env only.
+
+AI ENGINE variables (read by ai-engine/config.py, optional):
+  AIE_SEED=42                   random seed (reproducibility)
+  AIE_TRIALS=100                Optuna trials
+  AIE_NO_GPU=false              set true to force CPU-only training
+
+--------------------------------------------------------------------------------
+ 10.2 Nemotron variables (root .env) - THE AI EXPLANATION LAYER
+--------------------------------------------------------------------------------
+These are read SERVER-SIDE ONLY by backend/services/nemotron.py. The
+frontend NEVER receives or needs them.
+
+NAME: NEMOTRON_API_KEY
+PURPOSE: Your NVIDIA NIM / build.nvidia.com API key. Enables the "Ask AI"
+         explanation feature. When empty, the AI endpoints report
+         "configuration_required" and never call the network.
+REQUIRED: No (the system runs fine without it; AI explanations are disabled)
+WHERE: root .env ONLY (backend). NEVER in frontend\.env, NEVER in the code.
+EXAMPLE FORMAT: NEMOTRON_API_KEY=YOUR_KEY_HERE
+SECURITY WARNING: THE API KEY MUST NEVER BE PUT IN THE FRONTEND.
+         frontend\.env variables (VITE_*) are embedded into the JavaScript
+         bundle at build time and are visible to anyone who opens the page.
+         The Nemotron key is read only by the Python backend. Never commit
+         .env to Git.
+
+NAME: NEMOTRON_BASE_URL
+PURPOSE: Base URL of the OpenAI-compatible chat completions endpoint.
+REQUIRED: No (default https://integrate.api.nvidia.com/v1)
+WHERE: root .env
+EXAMPLE FORMAT: NEMOTRON_BASE_URL=https://integrate.api.nvidia.com/v1
+
+NAME: NEMOTRON_MODEL
+PURPOSE: The Nemotron model identifier sent to the API.
+REQUIRED: No (default nvidia/llama-3.3-nemotron-super-49b-v1)
+WHERE: root .env
+EXAMPLE FORMAT: NEMOTRON_MODEL=nvidia/llama-3.3-nemotron-super-49b-v1
+
+NAME: NEMOTRON_TIMEOUT_SECONDS
+PURPOSE: How long to wait for a Nemotron response before giving up.
+REQUIRED: No (default 60)
+WHERE: root .env
+EXAMPLE FORMAT: NEMOTRON_TIMEOUT_SECONDS=60
+
+NAME: NEMOTRON_MAX_RETRIES
+PURPOSE: How many retries on timeout / 5xx / 429 responses.
+REQUIRED: No (default 2)
+WHERE: root .env
+EXAMPLE FORMAT: NEMOTRON_MAX_RETRIES=2
+
+How the AI layer behaves without a key (verified):
+  GET /api/ai/status  -> {"provider":"NVIDIA NIM (Nemotron)","model":"...",
+                          "available":false,"status":"configuration_required",
+                          "message":"Nemotron configuration required: set
+                          NEMOTRON_API_KEY in .env (see .env.example)."}
+  POST /api/ai/ask    -> HTTP 200, {"success":false,"status":
+                          "configuration_required","answer":null,...}
+  The UI shows "Nemotron configuration required". Nothing is faked.
+
+--------------------------------------------------------------------------------
+ 10.3 Frontend variables (frontend\.env) - VITE_ only
+--------------------------------------------------------------------------------
+The frontend template (frontend\.env.example) defines:
+
+NAME: VITE_APP_NAME
+PURPOSE: Application name shown in the header.
+REQUIRED: No
+WHERE: frontend\.env
+EXAMPLE FORMAT: VITE_APP_NAME="HeatSync - Hyperlocal Urban Digital Twin"
+
+NAME: VITE_PILOT_ZONE
+PURPOSE: Text describing the pilot study area.
+REQUIRED: No
+WHERE: frontend\.env
+
+NAME: VITE_BACKEND_API_URL
+PURPOSE: Base URL the frontend uses for API calls IN PRODUCTION BUILDS.
+         In development the Vite proxy (/api -> localhost:8000) is used
+         instead (see backendClient.js).
+REQUIRED: No (default http://localhost:8000/api)
+WHERE: frontend\.env
+EXAMPLE FORMAT: VITE_BACKEND_API_URL="http://localhost:8000/api"
+
+NAME: VITE_ENABLE_3D_ELEVATION
+PURPOSE: Feature flag for 3D elevation rendering.
+REQUIRED: No (default true)
+EXAMPLE FORMAT: VITE_ENABLE_3D_ELEVATION=true
+
+NAME: VITE_DEFAULT_THEME
+PURPOSE: Initial UI theme ("light" or "dark").
+REQUIRED: No (default "light")
+EXAMPLE FORMAT: VITE_DEFAULT_THEME="light"
+
+OPTIONAL third-party API keys in frontend\.env (VITE_OPENAQ_API_KEY,
+VITE_NASA_POWER_API_KEY, VITE_NASA_EARTHDATA_TOKEN, VITE_COPERNICUS_DATASPACE_KEY,
+VITE_OPENWEATHER_API_KEY, VITE_MAPBOX_ACCESS_TOKEN, VITE_TOMTOM_TRAFFIC_API_KEY,
+VITE_HERE_TRAFFIC_API_KEY, VITE_DATA_GOV_IN_API_KEY, VITE_ISRO_BHUVAN_API_KEY,
+VITE_CESIUM_ACCESS_TOKEN):
+  PURPOSE: Reported by the frontend's "API Audit" modal. IMPORTANT: only
+           Open-Meteo weather is queried live; the other connectors only
+           report their real configuration state - the app never claims a
+           status without a real request. The app works with all of them
+           empty.
+  SECURITY: Because VITE_* values end up in the browser bundle, treat them
+           as PUBLIC. Never put the Nemotron key or any server secret here.
+
+
+--------------------------------------------------------------------------------
+ 11. DOCKER SETUP
+--------------------------------------------------------------------------------
+
+The repository ships a docker-compose.yml at the project root with TWO
+services (verified):
+
+  SERVICE  : database
+  CONTAINER: urban-twin-db
+  IMAGE    : postgis/postgis:15-3.3   (PostgreSQL 15 + PostGIS 3.3)
+  PURPOSE  : Optional PostGIS database. Runs the schema in
+             database/schema/init.sql automatically on first start
+             (mounted into /docker-entrypoint-initdb.d).
+  PORTS    : 5432 (host) -> 5432 (container), configurable via POSTGRES_PORT
+  VOLUME   : postgres_data (named volume for the database files)
+
+  SERVICE  : backend
+  CONTAINER: urban-twin-backend
+  IMAGE    : built from deployment/docker/Dockerfile (python:3.11-slim)
+  PURPOSE  : The FastAPI API. Code only - data and models are MOUNTED from
+             your disk (read-only), so the image stays small.
+  PORTS    : 8000 (host, configurable via API_PORT) -> 8000 (container)
+  VOLUMES  : ./data:/app/data:ro   and   ./models:/app/models:ro
+  DEPENDS  : database (starts the DB first)
+  RESTART  : unless-stopped
+  HEALTHCHECK: every 30 s, GET http://127.0.0.1:8000/api/health (in-image)
+
+CRITICAL: the backend container mounts ./data and ./models from the host
+READ-ONLY. Those folders MUST exist on your machine before `docker compose
+up`. On the reference machine they exist. On a fresh GitHub clone they do not
+- see section 25.
+
+The FRONTEND is intentionally NOT in the compose file - it is served by Vite
+(npm run dev) or by nginx from a production build (deployment/nginx/).
+
+--------------------------------------------------------------------------------
+ 11.1 Start the stack
+--------------------------------------------------------------------------------
+COMMAND:
+> docker compose up -d --build
+
+WHERE:
+> PowerShell, in the project root (F:\urban-digital-twin)
+
+PURPOSE:
+> Builds the backend image (first time: several minutes) and starts both
+> containers in the background (-d = detached). `--build` forces a rebuild
+> using the latest code.
+
+EXPECTED OUTPUT:
+> [+] Running 3/3 ... (network, volume, then:
+> Container urban-twin-backend  Started
+> Container urban-twin-db       Started
+
+--------------------------------------------------------------------------------
+ 11.2 Inspect the running containers
+--------------------------------------------------------------------------------
+COMMAND:
+> docker compose ps
+
+WHERE:
+> PowerShell, in the project root
+
+PURPOSE:
+> Shows the running services, their status and the host ports.
+
+EXPECTED OUTPUT:
+> NAME                IMAGE                  STATUS              PORTS
+> urban-twin-backend  urban-digital-twin-backend  Up ... (healthy)  0.0.0.0:8000->8000/tcp
+> urban-twin-db       postgis/postgis:15-3.3  Up ... (healthy)     0.0.0.0:5432->5432/tcp
+
+--------------------------------------------------------------------------------
+ 11.3 Read the logs
+--------------------------------------------------------------------------------
+COMMAND:
+> docker compose logs
+
+WHERE:
+> PowerShell, in the project root
+
+PURPOSE:
+> Shows the logs of all services (add -f to follow live output, Ctrl+C to
+> stop following).
+
+COMMAND:
+> docker compose logs backend
+
+PURPOSE:
+> Logs of the FastAPI container only (startup, requests, errors).
+
+COMMAND:
+> docker compose logs database
+
+PURPOSE:
+> Logs of the PostGIS container only (initialization, SQL from init.sql).
+
+--------------------------------------------------------------------------------
+ 11.4 Stop / restart / rebuild
+--------------------------------------------------------------------------------
+COMMAND:
+> docker compose down
+
+PURPOSE:
+> Stops and removes the containers (the named postgres_data volume is kept,
+> so the database data survives).
+
+COMMAND:
+> docker compose restart
+
+PURPOSE:
+> Restarts the containers without rebuilding.
+
+COMMAND:
+> docker compose build
+
+PURPOSE:
+> Rebuilds the backend image without starting anything.
+
+COMMAND:
+> docker compose up -d --build
+
+PURPOSE:
+> Rebuilds and starts (the "make it like new" command).
+
+--------------------------------------------------------------------------------
+ 11.5 Important docker-compose facts to remember
+--------------------------------------------------------------------------------
+  - Container names are urban-twin-backend and urban-twin-db. You can use
+    `docker compose ps` or `docker ps` to confirm.
+  - The backend only reads UDT_* variables; you can pass
+    UDT_DATABASE_URL etc. through the .env file you created in section 10.
+  - If you change backend code, run `docker compose up -d --build` to
+    rebuild the image. Data/model changes need NO rebuild (they are mounts).
+  - If port 8000 is already used by something else, set API_PORT in .env and
+    `docker compose up -d` again.
+
+
+--------------------------------------------------------------------------------
+ 12. DATABASE SETUP (POSTGRESQL / POSTGIS - OPTIONAL)
+--------------------------------------------------------------------------------
+
+Read this section BEFORE enabling the database. The default mode of the
+system is "artifact-first": the API reads everything from data/ and models/
+on disk, and you can skip this whole section. The database only becomes
+active when UDT_DATABASE_URL is set.
+
+--------------------------------------------------------------------------------
+ 12.1 What the database is
+--------------------------------------------------------------------------------
+From the repository (database/schema/init.sql + migrations):
+
+  ENGINE    : PostgreSQL with PostGIS extension
+  DATABASE  : urban_digital_twin
+  USER      : admin
+  PASSWORD  : password
+  PORT      : 5432
+  TABLES    : grid_cells (one row per 100 m cell, all engineered features +
+              geometry), predictions (per-cell predictions per scenario),
+              simulations (scenario sensitivity summaries),
+              weather_daily, aqi_daily, schema_migrations (bookkeeping).
+
+The schema is defined twice on purpose:
+  - database/schema/init.sql        - auto-run by Docker on first start
+  - database/migrations/0001_initial_schema.sql - applied by the migration
+    runner (same content, versioned).
+
+--------------------------------------------------------------------------------
+ 12.2 Does Docker initialize the database automatically?
+--------------------------------------------------------------------------------
+YES for the schema. docker-compose.yml mounts ./database/schema into
+/docker-entrypoint-initdb.d, and PostgreSQL runs every .sql file there on the
+FIRST initialization of an empty postgres_data volume. So:
+
+  docker compose up -d --build     (or: docker compose up -d database)
+
+creates the PostGIS extension and all tables automatically - on the first
+start only. Afterwards the volume persists.
+
+NO for the data. The tables are created EMPTY. To populate them from the
+pipeline outputs, run the migration runner and the seed loader (12.3).
+
+--------------------------------------------------------------------------------
+ 12.3 Migration and seed scripts (exist in the repository - use them)
+--------------------------------------------------------------------------------
+Two scripts are provided:
+  - database/migrate.py             - applies database/migrations/*.sql in
+                                      filename order; tracks applied files in
+                                      schema_migrations.
+  - database/seed/load_artifacts.py - loads the pipeline outputs:
+                                        grid_cells  <- data/feature_engineering/
+                                                       training_dataset.geojson
+                                        predictions <- data/predictions/predictions.csv
+                                        simulations <- data/outputs/reports/
+                                                       sensitivity_analysis.csv
+
+COMMAND:
+> python database/migrate.py --url postgresql://admin:password@localhost:5432/urban_digital_twin
+
+WHERE:
+> PowerShell, .venv activated, project root. (Alternatively set the
+> DATABASE_URL environment variable and omit --url.)
+
+PURPOSE:
+> Creates the schema (idempotent - it skips already-applied migrations).
+
+EXPECTED OUTPUT:
+> [apply] 0001_initial_schema.sql
+> Migrations complete.
+
+COMMAND:
+> python database/seed/load_artifacts.py --url postgresql://admin:password@localhost:5432/urban_digital_twin
+
+PURPOSE:
+> Loads the grid cells, predictions and simulations from the pipeline files.
+> Loading all 53,802 grid cells takes a minute or two.
+
+EXPECTED OUTPUT:
+> Grid features: 53802
+> grid_cells loaded: 53802 rows
+> predictions loaded: N rows
+> simulations loaded: 7 rows
+> Seed complete.
+
+--------------------------------------------------------------------------------
+ 12.4 Switch the backend to database mode
+--------------------------------------------------------------------------------
+Edit the root .env (from section 10) and set:
+
+  UDT_DATABASE_URL=postgresql://admin:password@localhost:5432/urban_digital_twin
+
+Then restart the backend (in Docker: `docker compose up -d --build`; locally:
+restart uvicorn).
+
+--------------------------------------------------------------------------------
+ 12.5 Verify database connectivity
+--------------------------------------------------------------------------------
+COMMAND:
+> Invoke-RestMethod -Method Get -Uri http://localhost:8000/api/health/database
+
+PURPOSE:
+> The API's own connectivity report.
+
+EXPECTED OUTPUT (after seeding):
+> enabled        : True
+> grid_cells     : 53802
+
+Direct check inside the container:
+COMMAND:
+> docker exec -it urban-twin-db psql -U admin -d urban_digital_twin -c "SELECT count(*) FROM grid_cells;"
+
+EXPECTED OUTPUT:
+>  count
+> -------
+>  53802
+
+If UDT_DATABASE_URL is empty, /api/health/database returns:
+> enabled : False, reason : "not configured"   (expected - database off)
+
+
+--------------------------------------------------------------------------------
+ 13. GIS DATA (WHAT DATASETS EXIST AND WHERE)
+--------------------------------------------------------------------------------
+
+Everything below was verified by listing the repository's data folders on
+the reference machine. Only datasets that actually exist are documented.
+
+The API reports per-dataset availability truthfully via
+GET /api/monitoring/status and GET /api/environment/summary - it never
+claims a dataset exists unless the files are on disk.
+
+--------------------------------------------------------------------------------
+ 13.1 Raw downloads - data/raw/  (regenerable, see section 15)
+--------------------------------------------------------------------------------
+  sentinel/   Purpose: Sentinel-2 Level-2A imagery (bands B02/B03/B04/B08)
+              Source: Microsoft Planetary Computer (default) or Copernicus
+                      Data Space (fallback)
+              Format: GeoTIFF scenes; Location: data/raw/sentinel/
+              Used by: NDVI, green cover, vegetation density, land cover
+  landsat/    Purpose: Landsat 8/9 Collection-2 Level-2 scenes (ST_B10
+                       thermal band + QA_PIXEL)
+              Source: Microsoft Planetary Computer (default) or USGS STAC
+              Format: GeoTIFF; Location: data/raw/landsat/
+              Used by: Land surface temperature (LST) + heat classes
+  dem/        Purpose: Digital Elevation Model (Copernicus DEM GLO-30)
+              Source: Copernicus DEM public AWS Open Data bucket (no key);
+                      SRTM via OpenTopography as fallback (needs
+                      OPENTOPOGRAPHY_API_KEY)
+              Format: GeoTIFF tiles (~30 m); Location: data/raw/dem/
+              Used by: elevation, slope, aspect, hillshade, contours,
+                       terrain tiles for the 3D map
+  weather/    Purpose: NASA POWER daily weather (T2M, RH2M, WS2M, PS,
+                       solar, rain)
+              Source: NASA POWER API (no key required)
+              Format: CSV; Location: data/raw/weather/
+              Used by: weather statistics and weather features
+  aqi/        Purpose: Air-quality observations (PM2.5, PM10, NO2, SO2, CO,
+                       O3)
+              Source: provider chain auto = Sentinel-5P (CDSE credentials)
+                      -> OpenAQ (OPENAQ_API_KEY) -> CPCB -> demo fallback
+              Format: CSV/JSON observations; Location: data/raw/aqi/
+              Used by: AQI rasters and interpolation
+  osm/        Purpose: OpenStreetMap vector layers
+              Source: OpenStreetMap (processed)
+              Format: GeoJSON; Location: data/raw/osm/layers/
+              KEY FILES (the "web_3d_*" layers):
+                web_3d_buildings.geojson, web_3d_roads.geojson,
+                web_3d_green_spaces.geojson, web_3d_water.geojson,
+                web_3d_natural_water_green.geojson, web_3d_trees.geojson
+              Used by: the 3D city map and /api/environment/summary
+
+--------------------------------------------------------------------------------
+ 13.2 Processed rasters - data/processed/  (regenerable)
+--------------------------------------------------------------------------------
+  clipped/    Clipped study-area scenes
+  ndvi/       NDVI raster (Sentinel-2), file ndvi.tif
+  greencover/ Green cover (NDVI > 0.30), green_cover.tif
+  vegetation/ Vegetation density (5 classes), vegetation_density.tif
+  landcover/  Land cover (Water/Built-up/Bare Land/Vegetation), landcover.tif
+  lst/        Land surface temperature (Landsat), LST.tif
+  heatmap/    Heat classification (6 classes: Very Cool .. Very Hot)
+  dem/, elevation/   Elevation rasters, Elevation.tif
+  slope/      Slope (Horn 1981), slope.tif
+  aspect/     Aspect
+  hillshade/  Hillshade
+  contours/   Contour lines
+  aqi/        AQI rasters (rasters/AQI.tif) + statistics + plots
+  weather/    Processed weather tables/stats
+  previews/   PNG previews of the rasters
+  stats/      Numeric statistics
+Used by: the backend catalogue (/api/data/layers), monitoring reports and
+(through the frontend overlay assets) the map.
+
+--------------------------------------------------------------------------------
+ 13.3 Browser-safe datasets (frontend/public/) - these SHIP with the repo
+--------------------------------------------------------------------------------
+  frontend/public/3d-layers/*.geojson   (~1.8 MB total)
+      web_3d_buildings, web_3d_roads, web_3d_green_spaces, web_3d_water,
+      web_3d_natural_water_green, web_3d_trees, boundary
+      Purpose: the 3D map's city layers. Small enough for the browser.
+  frontend/public/overlays/*.png + overlays.json   (~24 MB total)
+      18 PNG overlay images: lst, predicted_lst, heat_classes, ndvi,
+      green_cover, vegetation_density, landcover, elevation, slope, aspect,
+      hillshade, aqi, pm25, pm10, no2, so2, o3, co - each with WGS84 bounds
+      and value ranges in overlays.json.
+      Purpose: the map draws these as image overlays instead of loading big
+      GeoTIFFs. Browser-safe.
+  frontend/public/terrain/{z}/{x}/{y}.png   (~12 MB total)
+      MapLibre raster-dem tiles (terrarium encoding, maxzoom 14) built from
+      the real DEM. Purpose: 3D terrain. Browser-safe.
+  boundary.geojson (repo root) - the study-area boundary; the map renders it
+      as an outline.
+
+--------------------------------------------------------------------------------
+ 13.4 Prediction / model datasets - data/feature_engineering + data/predictions
+--------------------------------------------------------------------------------
+  training_dataset.csv       53,802 rows x 86 columns (~277 MB folder)
+      The ML training grid at 100 m. REQUIRED for prediction/simulation
+      endpoints (the serving context re-fits the preprocessor from it).
+  training_dataset.geojson    Same grid with geometry (used by the seed
+                              loader and the training-grid layer).
+  feature_statistics.json, quality_report.json, missing_value_report.json,
+  correlation_matrix.csv, feature_importance_baseline.csv
+      Quality reports from the feature-engineering stage.
+  predictions.csv            Test-set predictions (Grid_ID, Target_LST,
+                             Predicted_LST, Residual).
+  Predicted_LST.geojson      Full-grid predicted LST polygons (53,802
+                             cells) - TOO LARGE to load directly in the
+                             browser; served on demand by
+                             GET /api/prediction/heat.
+  Predicted_LST.tif          Predicted LST GeoTIFF (100 m, UTM 45N).
+  Predicted_LST.png          Preview image (browser-friendly).
+  serving/preprocessor.json  Cached fitted preprocessor (speeds up restarts).
+
+--------------------------------------------------------------------------------
+ 13.5 AI-engine outputs - data/outputs/
+--------------------------------------------------------------------------------
+  metrics.json               Evaluation metrics (test + 5-fold CV) read by
+                             /api/prediction/metrics and /api/model/info.
+  leaderboard.csv            6-model comparison table.
+  reports/leakage_report.json  THE feature list ("kept": 58 features) - the
+                             single source of truth for the prediction
+                             feature set.
+  reports/sensitivity_analysis.csv  Precomputed scenario results (read by
+                             /api/simulation/results).
+  reports/cv_5fold_results.csv, final_report.md
+  plots/SHAP/                global_shap_importance.csv, summary_plot.png,
+                             global_importance.png, ...
+  scenarios/                 Cached per-cell scenario results:
+                             <scenario>.json + <scenario>.geojson for each
+                             of the 7 scenarios + manifest.json.
+
+Sizes (reference machine, approximate): raw ~581 MB, processed ~146 MB,
+feature_engineering ~277 MB, predictions ~156 MB, outputs ~176 MB.
+
+--------------------------------------------------------------------------------
+ 13.6 Which are REQUIRED vs OPTIONAL vs GENERATED
+--------------------------------------------------------------------------------
+  REQUIRED for the full app:
+    - boundary.geojson (committed)
+    - frontend/public/3d-layers + overlays + terrain (committed - the 3D
+      map renders even without the backend)
+    - models/best_model.pkl + data/feature_engineering/training_dataset.csv
+      (NOT committed - needed for predictions, scenarios, hotspots,
+      cooling potential, model info)
+  OPTIONAL (adds value, not required to boot):
+    - all raw/ and processed/ rasters (monitoring + data catalogue entries)
+    - data/outputs/ reports and plots (SHAP importance, metrics, sensitivity)
+    - the PostgreSQL database (section 12)
+  GENERATED (produced by the pipelines - see sections 15 and 16):
+    - everything under data/raw, data/processed, data/feature_engineering,
+      data/predictions, data/outputs, models/ (if you run the pipelines)
+  TOO LARGE FOR DIRECT BROWSER LOADING:
+    - GeoTIFF rasters (LST.tif, Predicted_LST.tif, ...)
+    - the full-grid GeoJSON (Predicted_LST.geojson, scenario *.geojson with
+      53,802 features)
+    - training_dataset.csv
+  The frontend therefore uses PNG overlays + small web GeoJSON layers, and
+  the backend serves big files on demand with 1-hour cache headers.
+
+
+--------------------------------------------------------------------------------
+ 14. THE TRAINED MODEL
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+ 14.1 What the model is (verified from the artifacts)
+--------------------------------------------------------------------------------
+  FILES        : models/best_model.pkl  (32.6 MB - used for inference)
+                 models/best_model.onnx (30.8 MB - informational; the
+                 backend serves inference from the .pkl, NOT the onnx)
+  TYPE         : XGBRegressor (XGBoost gradient-boosted tree regressor)
+  TASK         : predicts Land Surface Temperature (Target_LST) in degrees
+                 Celsius for every 100 m grid cell
+  FEATURES     : 58 (the "kept" list in data/outputs/reports/
+                 leakage_report.json)
+  TRAINING DATA: data/feature_engineering/training_dataset.csv
+                 (53,802 cells x 86 columns; 27 columns dropped: leakage
+                 columns MeanLST/MaxLST/MinLST/Target_LST, Grid_ID and
+                 constants)
+  METRICS      (data/outputs/metrics.json, this build):
+                 test:        RMSE 0.7533 C, MAE 0.5621 C, R2 0.90097
+                 5-fold CV:   RMSE 0.78117 +/- 0.01076, R2 0.89395
+  MODEL VERSION: the installed xgboost version reported at serving time
+                 (3.4.0 on the reference machine)
+
+--------------------------------------------------------------------------------
+ 14.2 How the backend loads it (verified)
+--------------------------------------------------------------------------------
+backend/services/serving.py (ServingContext):
+  - The model is loaded LAZILY with joblib on the first prediction request,
+    then cached in memory for the life of the process.
+  - The feature list comes from data/outputs/reports/leakage_report.json
+    (fallback: feature names stored inside the fitted model).
+  - The preprocessor (median imputation + label encoding of the two
+    categorical columns LandCoverClass and VegDensityClass) is restored from
+    data/predictions/serving/preprocessor.json, or re-fitted from the
+    training CSV on first use.
+  - The full grid (X_all) is only loaded for simulation requests.
+
+--------------------------------------------------------------------------------
+ 14.3 How to verify the model is available
+--------------------------------------------------------------------------------
+COMMAND:
+> Invoke-RestMethod -Method Get -Uri http://localhost:8000/api/model/info
+
+WHERE:
+> PowerShell (backend must be running - see section 17)
+
+EXPECTED OUTPUT (model present):
+> available     : True
+> status        : available
+> model         : XGBRegressor
+> version       : 3.4.0
+> feature_count : 58
+> features      : {Area_m2, BuildingCount, ...}   (58 entries)
+> metrics       : {...}                           (real metrics.json values)
+
+--------------------------------------------------------------------------------
+ 14.4 What happens if the model files are missing
+--------------------------------------------------------------------------------
+If models/best_model.pkl (and the leakage report / training CSV) are absent:
+  - GET /api/model/info -> {"available":false,"status":"model_unavailable",
+    "model":null,"feature_count":null,"metrics":null,...}
+  - POST /api/prediction/predict and POST /api/simulation/run -> HTTP 503
+    with {"success":false,"status":"model_unavailable","required":
+    "models/best_model.pkl"}
+  - GET /api/health/ready -> "not_ready" with the missing artifacts listed
+  - The frontend disables predictions and shows the model as unavailable.
+  - The 3D map, OSM layers, monitoring and analytics keep working (they do
+    not need the model).
+
+DO NOT retrain the model just to get it back unless the pipeline changed.
+The trained artifacts already exist in the project folder. Retraining is only
+needed if you deleted the model and have the training dataset (see section
+16; it takes tens of minutes).
+
+
+--------------------------------------------------------------------------------
+ 15. THE GIS PIPELINE
+--------------------------------------------------------------------------------
+
+This section documents the actual pipeline (gis-engine/). You only need it
+if you want to re-download/reprocess the satellite data. On the reference
+machine all outputs already exist, so this is OPTIONAL for running the app.
+
+--------------------------------------------------------------------------------
+ 15.1 How it works (verified from gis-engine/main.py + config.py)
+--------------------------------------------------------------------------------
+The pipeline is an orchestrator that runs, in order:
+  STAGE 1/2 - Sentinel-2 search + download (Microsoft Planetary Computer
+              STAC, or Copernicus Data Space fallback)
+  STAGE 2/6 - Sentinel processing: clip, NDVI, green cover, vegetation
+              density, land cover, previews, stats
+  STAGE 3/6 - Landsat 8/9: search, download, LST + heat classes
+  STAGE 4/6 - DEM: download (Copernicus DEM GLO-30, no key), merge, clip,
+              terrain derivatives (elevation, slope, aspect, hillshade,
+              contours)
+  STAGE 5/6 - NASA POWER weather: download, derive, plot, stats (no key)
+  STAGE 6/6 - Air quality: observations (auto provider chain), interpolation
+              (pykrige/IDW), AQI calculation
+
+Feature engineering is a SEPARATE stage:
+  gis-engine/feature_engineering/main.py builds the 100 m ML grid from the
+  processed outputs -> data/feature_engineering/training_dataset.csv
+  (53,802 cells, ~90 engineered features).
+
+--------------------------------------------------------------------------------
+ 15.2 Running the GIS pipeline
+--------------------------------------------------------------------------------
+COMMAND:
+> cd gis-engine
+> python main.py
+
+WHERE:
+> PowerShell, .venv activated. IMPORTANT: run from inside gis-engine\ (the
+> script imports `from config import Config` relative to that folder).
+
+PURPOSE:
+> Downloads and processes ALL datasets for the study area. Each stage skips
+> work that already produced files (resumable). Add --force to redo
+> everything.
+
+USEFUL FLAGS (verified in gis-engine/main.py):
+  --force             re-download and reprocess everything
+  --skip-download     only process existing raw data
+  --skip-process      only download imagery (skip Sentinel processing)
+  --skip-landsat      skip the Landsat LST stage
+  --skip-dem          skip the DEM terrain stage
+  --skip-weather      skip the NASA POWER weather stage
+  --skip-aqi          skip the air quality stage
+  --cloud-max 15      max cloud cover percent for scene search
+  --days 365          search lookback window in days
+
+COMMAND:
+> cd feature_engineering
+> python main.py
+
+WHERE:
+> PowerShell, .venv activated, inside gis-engine\feature_engineering\
+
+PURPOSE:
+> Builds the 100 m ML training grid from the processed outputs.
+
+--------------------------------------------------------------------------------
+ 15.3 Credentials and providers
+--------------------------------------------------------------------------------
+  - Sentinel-2: Microsoft Planetary Computer = default, NO credentials.
+    Copernicus Data Space = fallback, needs CDSE_CLIENT_ID / CDSE_CLIENT_SECRET.
+  - Landsat 8/9: Planetary Computer (no key) or USGS STAC.
+  - DEM: Copernicus DEM public AWS bucket, NO key. SRTM via OpenTopography
+    needs OPENTOPOGRAPHY_API_KEY (fallback only).
+  - Weather: NASA POWER, NO key.
+  - AQI: provider chain "auto" = sentinel-5p (needs CDSE credentials) ->
+    openaq (needs OPENAQ_API_KEY) -> cpcb (best effort) -> demo (synthetic,
+    clearly labelled). With no credentials at all, the pipeline can fall
+    back to the labelled demo source (AQIConfig.demo_fallback = True).
+
+--------------------------------------------------------------------------------
+ 15.4 Expected outputs and runtime
+--------------------------------------------------------------------------------
+Outputs land in data/raw, data/processed, data/statistics, data/plots and
+logs/ (see section 13). Runtime: dominated by downloads - expect minutes to
+an hour+ depending on your connection; VERIFY IN YOUR ENVIRONMENT. Failure
+handling: exit code 0 = success, 1 = pipeline error, 2 = unexpected error,
+130 = Ctrl-C. Completed files are reused on re-runs (skips existing work).
+
+
+--------------------------------------------------------------------------------
+ 16. THE AI PIPELINE (XGBOOST / SHAP / NEMOTRON)
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+ 16.1 The training pipeline (ai-engine/main.py - 11 steps, verified)
+--------------------------------------------------------------------------------
+  1.  Load dataset + identify column roles
+  2.  Remove leakage features            -> data/outputs/reports/leakage_report.json
+  3.  Train/test split (80/20, seed 42)
+  4.  5-fold cross-validation (RMSE, MAE, R2, MAPE)
+  5.  Model comparison (6 models)        -> data/outputs/leaderboard.csv
+  6.  Optuna hyper-parameter optimisation (100 trials)
+  7.  Train final model                  -> models/best_model.pkl + .onnx
+  8.  SHAP explainability                -> data/outputs/plots/SHAP/
+  9.  Sensitivity analysis (green/building/tree/park/water)
+ 10.  Full-grid prediction               -> predictions.csv,
+                                          Predicted_LST.{geojson,tif,png}
+ 11.  Evaluation                         -> data/outputs/metrics.json
+
+COMMAND:
+> cd ai-engine
+> python main.py
+
+WHERE:
+> PowerShell, .venv activated (from the project root: cd ai-engine first)
+
+PURPOSE:
+> Trains and exports the model + all reports. This is the step that
+> REGENERATES models/best_model.pkl. It takes tens of minutes (the reference
+> run trained 6 models + 100 Optuna trials on 53,802 rows). You only need it
+> if the model is missing or you changed the pipeline. Env knobs:
+> AIE_SEED=42, AIE_TRIALS=100, AIE_NO_GPU=true (force CPU).
+
+--------------------------------------------------------------------------------
+ 16.2 XGBoost prediction (the live path)
+--------------------------------------------------------------------------------
+The API does predictions with the trained model at runtime - no retraining
+needed:
+  POST /api/prediction/predict  (single row or batch, max 1000 rows)
+  POST /api/simulation/run      (scenario perturbations through the model)
+  GET  /api/simulation/results/{scenario}/cells   (per-cell, full grid)
+See section 20 for exact requests.
+
+--------------------------------------------------------------------------------
+ 16.3 SHAP explainability
+--------------------------------------------------------------------------------
+The AI engine writes global SHAP importance (data/outputs/plots/SHAP/
+global_shap_importance.csv) which the API serves via:
+  GET /api/explainability/importance    (all 58 features, mean |SHAP|)
+  GET /api/explainability/top-features  (top 10)
+
+--------------------------------------------------------------------------------
+ 16.4 Nemotron (the natural-language AI - OPTIONAL)
+--------------------------------------------------------------------------------
+Architecture (verified):
+    Frontend
+      -> POST /api/ai/ask  {question, context}
+      -> FastAPI builds a WHITELISTED context from REAL data
+         (model status + client-supplied environment/urban/air/weather/
+         prediction/scenario blocks)
+      -> Nemotron/NVIDIA NIM (OpenAI-compatible chat completions)
+      -> plain-text explanation returned
+
+Rules enforced by the backend (backend/api/ai.py):
+  - Nemotron NEVER computes numbers; it only explains the supplied context.
+  - Missing data stays "unavailable" - nothing is fabricated.
+  - The API key is read server-side only.
+
+Nemotron is OPTIONAL: with no NEMOTRON_API_KEY the system runs normally and:
+  GET  /api/ai/status -> {"available":false,"status":"configuration_required",...}
+  POST /api/ai/ask    -> HTTP 200 {"success":false,"status":
+                         "configuration_required","answer":null,...}
+  The UI shows "Nemotron configuration required". Do NOT claim the AI is
+  available when the key is not configured - the status endpoint tells the
+  truth.
+
+To enable: add NEMOTRON_API_KEY (and optionally NEMOTRON_BASE_URL /
+NEMOTRON_MODEL / NEMOTRON_TIMEOUT_SECONDS / NEMOTRON_MAX_RETRIES) to the
+root .env, then restart the backend. Verify with GET /api/ai/status ->
+"configured" (availability is confirmed on the first real request).
+
+
+--------------------------------------------------------------------------------
+ 17. QUICK START - COMPLETE APPLICATION
+--------------------------------------------------------------------------------
+
+The shortest reliable sequence to run EVERYTHING (assumes sections 6-10
+completed and the data/models folders present, as on the reference machine):
+
+  1. Start Docker Desktop (if you will use the Docker backend).
+     Start menu -> "Docker Desktop" -> wait for "Engine running".
+
+  2. Open PowerShell and go to the project root:
+     > cd F:\urban-digital-twin
+
+  3. Start the backend. Choose ONE of:
+     (A) DOCKER MODE (recommended):
+         > docker compose up -d --build
+         The FastAPI backend (and optional PostGIS) run in containers.
+     (B) LOCAL PYTHON MODE (no Docker):
+         > .\.venv\Scripts\Activate.ps1
+         > uvicorn backend.main:app --reload
+     NEVER start both - port 8000 would conflict.
+
+  4. Start the frontend (in a SECOND PowerShell window):
+     > cd F:\urban-digital-twin\frontend
+     > npm run dev
+     Wait for "Local: http://localhost:5173/".
+
+  5. Open your browser at:  http://localhost:5173
+     You should see the HeatSync 3D dashboard: the Bhubaneswar map with
+     buildings, roads, green spaces, water and trees.
+
+  6. Verify the backend is up:
+     > Invoke-RestMethod -Method Get -Uri http://localhost:8000/api/health
+     Expected: status = ok, version = 1.0.0, app = "Urban Digital Twin API"
+
+  7. Verify the model is available:
+     > Invoke-RestMethod -Method Get -Uri http://localhost:8000/api/model/info
+     Expected: available = True, model = XGBRegressor, feature_count = 58
+
+  8. Verify GIS data availability:
+     > Invoke-RestMethod -Method Get -Uri http://localhost:8000/api/monitoring/status
+     Expected: a summary with the available/unavailable dataset counts
+     (osm must be available; the others depend on the data/ contents).
+
+  9. Verify a prediction works:
+     > Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/prediction/predict -ContentType "application/json" -Body '{"features":{"GreenCover":25.0,"MeanNDVI":0.4,"TreeCount":50}}'
+     Expected: success = True, one prediction with predicted_lst_c ~ 38.5 and
+     uhi_class = "Hot" (value depends on the shipped model).
+
+  10. Verify the frontend talks to the backend: on the map page click a
+      location, toggle the Heat/AQI/Vegetation overlays, run a scenario in
+      the Scenario tab. If those show data, the /api proxy is working.
+
+This is the complete system. Leave the two windows open (backend + frontend).
+
+
+--------------------------------------------------------------------------------
+ 18. LOCAL DEVELOPMENT MODE (WITHOUT DOCKER)
+--------------------------------------------------------------------------------
+
+The repository fully supports running without Docker (README.md and the
+Makefile `serve` target). Requirements: the Python environment (section 8)
+and the frontend dependencies (section 9). The database is optional.
+
+  DOCKER MODE                        LOCAL PYTHON MODE
+  -------------------------------    ---------------------------------
+  Backend  : docker compose up -d    .\.venv\Scripts\Activate.ps1
+              --build                uvicorn backend.main:app --reload
+  Frontend : npm run dev             npm run dev   (same either way)
+  Database : auto via container      postgresql + postgis natively, or skip
+  Data     : mounted from ./data     read from ./data directly
+  Hot reload of code: needs rebuild  uvicorn --reload watches backend code
+
+Local backend startup (the exact commands from the repository):
+
+COMMAND:
+> .\.venv\Scripts\Activate.ps1
+> uvicorn backend.main:app --reload
+
+WHERE:
+> PowerShell, in the project root
+
+PURPOSE:
+> Starts FastAPI on http://localhost:8000 with auto-reload for development.
+> Equivalent alternatives (both verified in the repository):
+>   python -m backend.run
+>   python -m uvicorn backend.main:app --reload
+> Swagger UI: http://localhost:8000/docs  |  ReDoc: http://localhost:8000/redoc
+
+Local mode environment: same root .env (section 10). The frontend dev proxy
+(vite.config.js) sends /api to http://localhost:8000, so the two processes
+are enough. Add UDT_DATABASE_URL to .env + run migrate/seed (section 12)
+only if you want PostGIS mode.
+
+
+--------------------------------------------------------------------------------
+ 19. API VERIFICATION (ENDPOINT REFERENCE + POWERSHELL COMMANDS)
+--------------------------------------------------------------------------------
+
+All endpoints below were verified in the source code (backend/api/*.py).
+Base URL: http://localhost:8000  (Swagger UI at /docs).
+
+GET vs POST:
+  - GET  = read-only. Use Invoke-RestMethod -Method Get -Uri <url>.
+  - POST = sends a JSON body that changes/creates something (here: runs a
+    prediction or scenario). Use Invoke-RestMethod -Method Post with
+    -ContentType "application/json" and -Body '<json>'.
+  - A POST needs a valid JSON body or the API answers 422 (validation) or
+    400 (missing/invalid input). Real payloads are given below - the schemas
+    come from backend/schemas/schemas.py, not from Swagger placeholders.
+
+--------------------------------------------------------------------------------
+ 19.1 Health & readiness
+--------------------------------------------------------------------------------
+  METHOD  URL                     PURPOSE                          EXPECTED
+  GET     /api/health             liveness - process is up         200 {"status":"ok","version":"1.0.0","app":"Urban Digital Twin API"}
+  GET     /api/health/ready       readiness - model + artifacts    200 {"status":"ready"|"not_ready","model_ready":true/false,"missing_artifacts":[...]}
+  GET     /api/health/artifacts   presence of every artifact       200 list of {name,path,exists}
+  GET     /api/health/database    PostGIS connectivity             200 {"enabled":false,...} or {"enabled":true,"grid_cells":N}
+
+COMMAND:
+> Invoke-RestMethod -Method Get -Uri http://localhost:8000/api/health
+> Invoke-RestMethod -Method Get -Uri http://localhost:8000/api/health/ready
+
+--------------------------------------------------------------------------------
+ 19.2 Model status
+--------------------------------------------------------------------------------
+  GET     /api/model/info         model availability + metadata    200 {"available":true,"status":"available","model":"XGBRegressor","feature_count":58,...}
+  GET     /api/prediction/model   same report (alias)              200 (identical shape)
+
+COMMAND:
+> Invoke-RestMethod -Method Get -Uri http://localhost:8000/api/model/info
+
+--------------------------------------------------------------------------------
+ 19.3 Data catalogue & monitoring
+--------------------------------------------------------------------------------
+  GET  /api/data/layers                  list every produced layer        200 {count,categories,layers:[...]}
+  GET  /api/data/layers/{name}           download a layer file            200 file (GeoJSON/TIF/PNG/CSV) ; 404 unknown
+  GET  /api/data/boundary                study-area boundary GeoJSON      200 FeatureCollection
+  GET  /api/monitoring/status            per-dataset availability         200 {datasets:[...],summary:{available,unavailable,total}}
+  GET  /api/environment/summary          OSM-derived city statistics      200 {city:"Bhubaneswar",stats:{buildings,roads,green,natural,water},derived:{...},availability:{...}}
+  GET  /api/dashboard/summary            aggregated dashboard payload     200 {app,metrics,sensitivity,feature_statistics,catalogue,database}
+
+COMMAND:
+> Invoke-RestMethod -Method Get -Uri http://localhost:8000/api/data/layers
+> Invoke-RestMethod -Method Get -Uri http://localhost:8000/api/monitoring/status
+> Invoke-RestMethod -Method Get -Uri http://localhost:8000/api/environment/summary
+
+--------------------------------------------------------------------------------
+ 19.4 Prediction
+--------------------------------------------------------------------------------
+  GET  /api/prediction/features     feature schema + encodings       200 {count:58,features:[...],categorical_columns,encodings,imputation}
+  POST /api/prediction/predict      LST prediction (1 row or batch)   200 {success,count,model,model_version,predictions:[...]}
+  GET  /api/prediction/metrics      pipeline metrics                  200 metrics.json content ; 404 missing
+  GET  /api/prediction/predictions  test predictions CSV              200 CSV file ; 404
+  GET  /api/prediction/heat         full-grid predicted GeoJSON       200 GeoJSON (53,802 cells - large)
+  GET  /api/prediction/heat/raster  predicted LST GeoTIFF             200 TIF
+  GET  /api/prediction/heat/preview predicted LST PNG                 200 PNG
+
+COMMAND (single-row prediction - verified on the reference machine):
+> Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/prediction/predict -ContentType "application/json" -Body '{"features":{"GreenCover":25.0,"MeanNDVI":0.4,"TreeCount":50}}'
+
+EXPECTED OUTPUT (shape):
+> success        : True
+> count          : 1
+> model          : XGBRegressor
+> model_version  : 3.4.0
+> predictions    : {@{predicted_lst_c=38.494; grid_id=None; uhi_class=Hot}}
+
+COMMAND (batch - max 1000 rows):
+> Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/prediction/predict -ContentType "application/json" -Body '{"batch":[{"GreenCover":25.0,"MeanNDVI":0.4,"TreeCount":50},{"GreenCover":40.0,"MeanNDVI":0.6,"TreeCount":200}]}'
+
+NOTES on the payload:
+  - Provide EITHER "features" (one row) OR "batch" (list of rows), not both.
+  - The 58 real feature names come from GET /api/prediction/features; the
+    API ignores unknown columns, imputes missing ones with the training
+    medians and maps unseen categorical values to the most common code.
+  - Grid_ID is optional and never a feature.
+  - Response uhi_class uses the project's fixed visualization breaks:
+    Very Cool < 20, Cool < 25, Moderate < 30, Warm < 35, Hot < 40, else
+    Very Hot (degrees C).
+  - 503 {"status":"model_unavailable"} = model artifact missing.
+
+--------------------------------------------------------------------------------
+ 19.5 Simulation
+--------------------------------------------------------------------------------
+  GET  /api/simulation/scenarios                     the 7 canonical scenarios      200 [ {name,description,perturbations}, ... ]
+  GET  /api/simulation/results                       precomputed sensitivity        200 {count,results:[...]} ; 404 if absent
+  POST /api/simulation/run                           run a named or custom scenario 200 {success,scenario,baseline_lst,mean_predicted_lst,mean_delta_lst,...}
+  GET  /api/simulation/results/{scenario}/cells      per-cell results (full grid)   200 {success,scenario,count:53802,cells:[...]}
+  GET  /api/simulation/results/{scenario}/geojson    per-cell MapLibre GeoJSON      200 FeatureCollection (application/geo+json)
+  (all cell endpoints accept ?refresh=true to force regeneration)
+
+COMMAND (named scenario):
+> Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/simulation/run -ContentType "application/json" -Body '{"scenario":"increase_green_10"}'
+
+COMMAND (custom perturbation - valid kinds: add, mul, min, max):
+> Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/simulation/run -ContentType "application/json" -Body '{"perturbations":{"GreenCover":["add",20.0]}}'
+
+COMMAND (list scenarios):
+> Invoke-RestMethod -Method Get -Uri http://localhost:8000/api/simulation/scenarios
+
+EXPECTED OUTPUT (run, shape):
+> success            : True
+> scenario           : increase_green_10
+> n_cells            : 53802
+> baseline_lst       : 40.77...      (mean C over the grid)
+> mean_predicted_lst : 39.81...
+> mean_delta_lst     : -0.97...      (negative = cooling)
+> pct_cells_cooler   : 92.12...
+> n_perturbed_features : 13
+
+ERRORS: 400 when both/neither scenario and perturbations are given, or the
+scenario name is unknown; 503 model_unavailable when the model/grid is
+missing. The 7 valid scenario names are listed in section 23.
+
+--------------------------------------------------------------------------------
+ 19.6 Explainability
+--------------------------------------------------------------------------------
+  GET  /api/explainability/importance    global SHAP importance   200 {count:58,importance:[...]} ; 404 absent
+  GET  /api/explainability/top-features  top-10 features          200 {top_features:[...]} ; 404 absent
+
+--------------------------------------------------------------------------------
+ 19.7 AI (Nemotron)
+--------------------------------------------------------------------------------
+  GET  /api/ai/status    configuration/availability (no network)   200 {"provider":"NVIDIA NIM (Nemotron)","status":"configuration_required"|"configured",...}
+  POST /api/ai/ask       ask a city question                       200 {"success":true/false,"status":"ok"|"configuration_required"|"auth_error"|...,"answer":...,"data_used":[...],"context_used":{...}}
+
+COMMAND:
+> Invoke-RestMethod -Method Get -Uri http://localhost:8000/api/ai/status
+> Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/ai/ask -ContentType "application/json" -Body '{"question":"Why is this area hot?","context":{"location":{"name":"Sector A","lat":20.25,"lng":85.78},"environment":{"ndvi":0.18,"green_cover":12.0},"urban":{"building_density":850,"road_density":3.2}}}'
+
+Without NEMOTRON_API_KEY the POST returns success=false and status
+"configuration_required" with answer=null (never a crash, never a fake
+answer). The whitelisted context blocks are: location, environment, urban,
+air_quality, weather, prediction, scenario.
+
+--------------------------------------------------------------------------------
+ 19.8 City-wide endpoints (3D upgrade)
+--------------------------------------------------------------------------------
+  GET /api/city/point?lat=20.25&lng=85.78            location intelligence (nearest cell)   200/503
+  GET /api/city/hotspots?limit=50                    hottest cells by predicted LST         200/503
+  GET /api/city/cooling-potential                    intervention potential per cell       200
+  GET /api/city/cooling-potential/geojson            MapLibre cooling layer                 200
+  GET /api/city/interventions?per_scenario=5         ranked cooling opportunities           200
+  GET /api/city/intelligence                         command-centre aggregates              200
+  GET /api/city/distribution                         real histograms across the grid        200/503
+  GET /api/city/explain?lat=20.25&lng=85.78          "why is this area hot?" factors         200/503
+  GET /api/routing/heat-safe?start_lat=20.25&start_lng=85.78&end_lat=20.26&end_lng=85.79   fastest + coolest route  200/503
+
+COMMAND:
+> Invoke-RestMethod -Method Get -Uri "http://localhost:8000/api/city/point?lat=20.25&lng=85.78"
+> Invoke-RestMethod -Method Get -Uri "http://localhost:8000/api/city/hotspots?limit=10"
+> Invoke-RestMethod -Method Get -Uri "http://localhost:8000/api/routing/heat-safe?start_lat=20.25&start_lng=85.78&end_lat=20.26&end_lng=85.79"
+
+These return HTTP 503 with {"available":false,...} when the underlying
+artifacts (model / training grid / scenario caches) are missing - the
+frontend renders that gracefully.
+
+--------------------------------------------------------------------------------
+ 19.9 Root & docs
+--------------------------------------------------------------------------------
+  GET /            API banner + version + docs link   200 {"message","version","status":"running","docs":"/docs"}
+  GET /docs        Swagger UI (interactive)
+  GET /redoc       ReDoc
+
+
+--------------------------------------------------------------------------------
+ 20. TESTING THE MODEL
+--------------------------------------------------------------------------------
+
+All commands assume the backend is running (section 17) and the model is
+available (section 14.3). PowerShell:
+
+  1. MODEL INFO
+     > Invoke-RestMethod -Method Get -Uri http://localhost:8000/api/model/info
+     Expected: available = True, status = available, model = XGBRegressor,
+     feature_count = 58, version = <xgboost version>.
+
+  2. FEATURE SCHEMA
+     > Invoke-RestMethod -Method Get -Uri http://localhost:8000/api/prediction/features
+     Expected: count = 58; categorical_columns = LandCoverClass,
+     VegDensityClass; encodings map original values to codes; imputation
+     holds the training medians.
+
+  3. SINGLE PREDICTION
+     > Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/prediction/predict -ContentType "application/json" -Body '{"features":{"GreenCover":25.0,"MeanNDVI":0.4,"TreeCount":50}}'
+     Expected: success = True, count = 1, model = XGBRegressor, and one
+     prediction {predicted_lst_c ~ 38.5, uhi_class = "Hot"}. The exact
+     value depends on the shipped model but must be a plausible LST
+     (roughly 25-45 C for Bhubaneswar features) - never NaN.
+
+  4. BATCH PREDICTION
+     > Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/prediction/predict -ContentType "application/json" -Body '{"batch":[{"GreenCover":25.0,"MeanNDVI":0.4,"TreeCount":50},{"GreenCover":40.0,"MeanNDVI":0.6,"TreeCount":200}]}'
+     Expected: success = True, count = 2, two predictions.
+
+  5. SCENARIO (named)
+     > Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/simulation/run -ContentType "application/json" -Body '{"scenario":"increase_green_20"}'
+     Expected: success = True, scenario = increase_green_20, n_cells = 53802,
+     mean_delta_lst < 0 (greening cools), pct_cells_cooler > 50.
+
+  6. SCENARIO RESULTS (aggregate)
+     > Invoke-RestMethod -Method Get -Uri http://localhost:8000/api/simulation/results
+     Expected: {count: 7, results:[...]} with a row per scenario
+     (sensitivity_analysis.csv is present in this repository).
+
+  7. CELL-LEVEL SCENARIO
+     > Invoke-RestMethod -Method Get -Uri "http://localhost:8000/api/simulation/results/increase_green_20/cells"
+     Expected: success = True, scenario = increase_green_20, count = 53802,
+     cells[] where every cell has grid_id, baseline_lst, scenario_lst,
+     delta_lst, latitude, longitude; and scenario_lst - baseline_lst equals
+     delta_lst.
+
+  8. GEOJSON SCENARIO OUTPUT
+     > Invoke-RestMethod -Method Get -Uri "http://localhost:8000/api/simulation/results/increase_green_20/geojson"
+     Expected: a FeatureCollection (content-type application/geo+json) with
+     53,802 Polygon features; each property carries grid_id, baseline_lst,
+     scenario_lst, delta_lst. First call computes + caches it (can take a
+     few seconds); later calls are instant. ?refresh=true forces a
+     regeneration.
+
+Cross-check (this is what the repository's own tests assert): the live run,
+the stored sensitivity results and the cell-level data must agree to
+floating-point precision (e.g. mean_delta_lst identical).
+
+
+--------------------------------------------------------------------------------
+ 21. TESTING THE 3D MAP (MANUAL BROWSER CHECKLIST)
+--------------------------------------------------------------------------------
+
+Open http://localhost:5173 and work through this list. The checklist is
+derived from the actual frontend components (App.jsx, DigitalTwinMap3D.jsx,
+LayerManager, BeforeAfterComparison, AnalyticsCharts, AIAssistant).
+
+  [ ] MAP LOADS: the 3D map appears with a tilted (pitch 58) view of
+      Bhubaneswar centered near 20.2636 N, 85.8275 E; the OSM base map
+      renders; no console errors.
+  [ ] BUILDINGS: 3D extruded building footprints are visible; hover shows a
+      popup with height; the stats card shows the building count.
+  [ ] ROADS: major roads (orange) and local streets are visible; hover shows
+      the road class.
+  [ ] GREEN SPACES: OSM leisure/green polygons render green.
+  [ ] WATER: water bodies render blue.
+  [ ] TREES: OSM tree/natural points render (clustered at low zoom,
+      individual dots at high zoom); the stats card shows the tree count.
+  [ ] TERRAIN: toggle the Terrain -> "3D Terrain" layer; the ground gets
+      real elevation (MapLibre raster-dem from /terrain tiles); camera
+      presets City / District / Street change the view; the Orbit control
+      rotates the camera.
+  [ ] HEAT: click the "Heat" chip (or Layers -> HEAT -> LST); the observed
+      LST overlay appears with its legend; "Model" chip shows the predicted
+      LST overlay.
+  [ ] AQI: click the "AQI" chip; the AQI overlay + CPCB legend appear.
+  [ ] VEGETATION: click the "Vegetation" chip (NDVI); green-cover and
+      vegetation-density overlays also toggle from the Layers panel.
+  [ ] LAND COVER: Layers -> LAND COVER -> Land Cover shows the 4 classes.
+  [ ] LAYER OPACITY: the Layers panel opacity sliders change overlay/city
+      layer transparency in real time.
+  [ ] SEARCH: the City Search box finds a place (Nominatim); selecting a
+      result flies the camera to it and drops a marker.
+  [ ] CLICK LOCATION: clicking anywhere on the map selects the location,
+      shows a marker and opens the Location Intelligence panel.
+  [ ] LOCATION INTELLIGENCE: the panel shows nearest-grid-cell stats
+      (buildings/roads/green/trees within ~150 m) and live weather when
+      available.
+  [ ] HOTSPOTS: the "Hotspots" chip draws the top-100 hottest cells (from
+      /api/city/hotspots); clicking a hotspot selects it.
+  [ ] COOLING OPPORTUNITIES: the "Cooling" chip draws the model-derived
+      cooling-potential layer (/api/city/cooling-potential/geojson) with
+      per-cell best scenario.
+  [ ] SCENARIO MODE: open the Scenario tab; run one of the 7 scenarios; the
+      map then shows the cell-level overlay with CURRENT / SCENARIO /
+      DIFFERENCE tabs.
+  [ ] CURRENT / SCENARIO / DIFFERENCE: switching tabs recolors the cells
+      (baseline, perturbed, delta); the legend gradient updates; hovering a
+      cell shows Grid ID + baseline/scenario/delta LST.
+  [ ] ANALYTICS: the Analytics tab shows the Chart.js dashboard (LST
+      distribution pie, PM2.5 doughnut, baseline vs simulated bar, diurnal
+      line, radar) using real availability + environment data.
+  [ ] AI: "Ask AI" opens the AI assistant. Without NEMOTRON_API_KEY it shows
+      "Nemotron configuration required"; with a key it answers about the
+      selected location using real context.
+  [ ] FULLSCREEN: the "Full" camera button enters/leaves fullscreen.
+  [ ] RESPONSIVE/MOBILE: shrink the window (or use device emulation); the
+      side panels collapse into floating buttons/drawers and the map
+      resizes correctly (a ResizeObserver keeps the canvas in sync).
+
+Anything that depends on the backend model (predictions, scenario cells,
+hotspots, cooling) will show an "unavailable" state if models/best_model.pkl
+or the training dataset are missing - that is expected behaviour, not a bug.
+
+
+--------------------------------------------------------------------------------
+ 22. THE SEARCH SYSTEM
+--------------------------------------------------------------------------------
+
+Verified from frontend/src/services/geocoding.js:
+
+  PROVIDER : OpenStreetMap Nominatim (https://nominatim.openstreetmap.org/
+             search) - free, keyless. The provider is isolated behind
+             searchPlaces(), so it could be swapped later.
+  BEHAVIOUR:
+    - DEBOUNCE: requests are delayed 400 ms after the last keystroke (no
+      request per character).
+    - MINIMUM QUERY: 2 characters (MIN_QUERY_LENGTH).
+    - RESULT LIMIT: 6 results (RESULT_LIMIT).
+    - CACHING: an in-memory Map cache (max 100 entries) - repeated queries
+      are served instantly without a network call.
+    - CANCELLATION: an AbortController aborts stale in-flight requests, so
+      outdated results are never shown.
+    - BIAS: a viewbox around the Bhubaneswar study area
+      (85.70,20.08 - 85.95,20.45) makes local places rank first.
+    - FLY-TO: selecting a result calls map.flyTo() to the place's
+      coordinates (zoom 15-16 depending on bounding box) and drops a marker
+      (handled in App.jsx handleSearchSelect).
+    - FAILURE BEHAVIOUR: any error resolves to [] - the UI shows a graceful
+      "search unavailable" state; it never throws.
+  RATE LIMITS: public Nominatim asks clients to be polite (the frontend's
+  debounce + small result limit + cache already comply with good-citizen
+  usage). If you receive HTTP 429 responses, slow down searches; consider
+  running your own Nominatim instance for heavy production use
+  (VERIFY IN YOUR ENVIRONMENT - this project does not bundle one).
+
+
+--------------------------------------------------------------------------------
+ 23. THE SCENARIO SYSTEM
+--------------------------------------------------------------------------------
+
+The 7 canonical scenarios are defined in ai-engine/config.py
+(ScenarioConfig) and exposed by GET /api/simulation/scenarios (verified by
+listing them from the running API):
+
+  increase_green_10      Increase green cover by 10% (GreenCover, NDVI,
+                         vegetation %, trees up; built-up down)
+  increase_green_20      Same, stronger (+20%)
+  decrease_buildings_10  Reduce building footprint & density by 10%
+  decrease_buildings_20  Reduce building footprint & density by 20%
+  increase_trees         Increase tree count and tree density (+50 trees,
+                         +10 density)
+  increase_parks         Increase park area / bring parks closer
+                         (DistToPark x0.75, cooling index up)
+  increase_water         Increase water bodies (DistToWater x0.75, water
+                         pct up)
+
+How a scenario run works (verified in backend/services/simulation.py and
+ai-engine/scenario_simulator.py):
+  BASELINE    : the full grid (or a sample) is predicted by XGBoost.
+  PERTURBATION: the scenario's feature perturbations are applied; kinds are
+                "add" (feature += value), "mul" (feature *= value),
+                "min" / "max" (clamp feature).
+  PREDICTION  : the perturbed grid is predicted by XGBoost.
+  DELTA       : delta = scenario_prediction - baseline_prediction per cell
+                (mean_delta_lst < 0 means cooling). No hardcoded
+                temperature reductions.
+  SPATIAL     : per-cell results are cached under data/outputs/scenarios/
+                (<scenario>.json + <scenario>.geojson) and served by
+                /api/simulation/results/{scenario}/cells and .../geojson.
+  CACHING     : results are computed once and reused; ?refresh=true forces
+                regeneration; caches invalidate automatically when the model
+                or dataset changes (the cache manifest tracks the model
+                state).
+
+You can also run CUSTOM scenarios: POST /api/simulation/run with
+{"perturbations":{"FeatureName":["add"|"mul"|"min"|"max", value]}} using
+any of the 58 real feature names (see GET /api/prediction/features).
+Unknown features/kinds are rejected with HTTP 400.
+
+
+--------------------------------------------------------------------------------
+ 24. PERFORMANCE NOTES
+--------------------------------------------------------------------------------
+
+  - BROWSER-SAFE LAYERS: the map never loads raw rasters. It uses PNG
+    overlays (frontend/public/overlays, ~24 MB total) with baked-in bounds,
+    small web GeoJSON layers (frontend/public/3d-layers, ~1.8 MB) and
+    pre-rendered terrain tiles (frontend/public/terrain).
+  - LAZY LOADING: hotspots and cooling-potential GeoJSON are fetched ONLY
+    when their chips are toggled on (App.jsx); the scenario overlay
+    GeoJSON is fetched only when a scenario runs.
+  - SCENARIO GEOJSON: the full-grid scenario layer has 53,802 features -
+    it is fetched on demand and cached server-side; the response carries
+    Cache-Control headers.
+  - CACHING: layer files and heat outputs are served with
+    "Cache-Control: public, max-age=3600"; scenario cell caches live in
+    data/outputs/scenarios/; the fitted preprocessor is cached in
+    data/predictions/serving/preprocessor.json so restarts skip refitting.
+  - DOCKER: data/ and models/ are mounted read-only - no copies inside the
+    image, no rebuild needed when data changes.
+  - MODEL LOADING: the XGBoost model is deserialized ONCE on the first
+    prediction request and reused for every request (lazy + cached).
+  - API RESPONSES: heavy artifacts (GeoTIFFs, full-grid GeoJSON, CSVs) are
+    streamed as files on demand; monitoring/environment endpoints compute
+    small aggregates from disk.
+  - WHY large raw GIS files must NOT go straight into the browser: a 100 m
+    GeoTIFF or a 53,802-polygon GeoJSON is many megabytes of JSON/raster;
+    fetching and parsing it in the browser would stall the page and exhaust
+    memory on low-end devices. The architecture keeps big files on the
+    backend and ships the browser small, pre-rendered representations.
+
+
+--------------------------------------------------------------------------------
+ 25. INSTALLING FROM GITHUB (WHAT IS AND IS NOT COMMITTED)
+--------------------------------------------------------------------------------
+
+If you clone the repository from GitHub instead of using the full project
+folder, note that several things are deliberately NOT in Git (see the root
+.gitignore):
+
+  NOT COMMITTED (gitignored):
+    - data/            - ALL pipeline outputs (raw, processed,
+                         feature_engineering, predictions, outputs,
+                         statistics). Reason: size (1.2 GB+ on disk).
+    - models/          - best_model.pkl / best_model.onnx. Reason: size +
+                         regenerated by the AI engine (*.pkl, *.onnx).
+    - .env, .env.local - secrets. Reason: security (only .env.example is
+                         committed).
+    - logs/, node_modules/, .venv/, frontend/dist/ - generated files.
+    - *.tif, *.shp, *.gpkg, *.nc, ... - raster/vector data files.
+
+  COMMITTED:
+    - All source code (backend/, frontend/src/, ai-engine/, gis-engine/,
+      scenario-engine/, database/, tests/, docs/, scripts/).
+    - frontend/public/ - the browser-safe 3D-layers, overlays and terrain
+      assets (small enough to commit and needed for the map to work).
+    - boundary.geojson, scenario.geojson, docker-compose.yml,
+      requirements*.txt, .env.example, Makefile, LICENSE.
+
+  WHAT YOU NEED SEPARATELY if you only have a GitHub clone:
+    To run the FULL app (predictions, scenarios, hotspots, cooling) you need
+    the trained model and the training dataset, which are NOT on GitHub.
+    Two ways to get them:
+      (a) Ask the project owner for a copy of the models/ folder and the
+          data/feature_engineering/training_dataset.csv (+ data/outputs/
+          reports/leakage_report.json) and place them at the same paths.
+      (b) Regenerate everything by running the pipelines (needs the
+          optional credentials in section 15.3 for some data sources and
+          significant time):
+            cd gis-engine; python main.py
+            cd feature_engineering; python main.py
+            cd ../.. ; cd ai-engine; python main.py
+    The 3D map, OSM layers, monitoring and analytics still work from a fresh
+    clone WITHOUT the model/data because the OSM web layers, overlays and
+    terrain ship with the repo - only model-dependent features are disabled.
+
+  DO NOT push data/, models/, .env or any credentials to GitHub - the
+  .gitignore is already set up to keep them out.
+
+
+--------------------------------------------------------------------------------
+ 26. WINDOWS TROUBLESHOOTING
+--------------------------------------------------------------------------------
+
+Each entry: SYMPTOM / CAUSE / FIX / VERIFICATION.
+
+1. SYMPTOM:  "'docker' is not recognized as the name of a cmdlet..."
+   CAUSE:    Docker Desktop is not installed or its PATH entry is missing.
+   FIX:      Install Docker Desktop (section 6.4) and restart PowerShell.
+   VERIFY:   docker --version
+
+2. SYMPTOM:  "error during connect ... the docker daemon is not running"
+   CAUSE:    Docker Desktop is installed but not started.
+   FIX:      Start "Docker Desktop" from the Start menu; wait for the whale
+             icon to report "Engine running", then retry.
+   VERIFY:   docker info   (or: docker compose ps)
+
+3. SYMPTOM:  WSL2 errors during Docker startup
+   CAUSE:    WSL2 not enabled/updated, or virtualisation off in BIOS.
+   FIX:      wsl --install (Administrator); wsl --update; enable
+             "Virtual Machine Platform" in Windows Features; reboot.
+   VERIFY:   wsl --status  -> "Default Version: 2"
+
+4. SYMPTOM:  "Port 8000 is already in use" / backend fails to start
+   CAUSE:    Another process (or a second backend) occupies port 8000.
+   FIX:      Find and stop it: Get-NetTCPConnection -LocalPort 8000, then
+             stop that PID, or set API_PORT=8001 in .env and restart. Never
+             run the Docker backend and the local uvicorn at the same time.
+   VERIFY:   uvicorn starts and http://localhost:8000/api/health responds.
+
+5. SYMPTOM:  "Port 5173 is already in use" when running npm run dev
+   CAUSE:    Another Vite/dev server on 5173.
+   FIX:      Stop the other process, or run `npm run dev -- --port 5174`.
+   VERIFY:   npm run dev prints the new Local URL.
+
+6. SYMPTOM:  "ENOENT: no such file or directory ... package.json"
+   CAUSE:    npm was run outside the frontend folder.
+   FIX:      cd F:\urban-digital-twin\frontent (check spelling) then retry.
+   VERIFY:   dir  shows package.json.
+
+7. SYMPTOM:  "ModuleNotFoundError: No module named 'fastapi'" (or xgboost,
+             pandas, ...) when running python commands
+   CAUSE:    The .venv was not activated, or requirements were not
+             installed, or the wrong Python is on PATH.
+   FIX:      .\.venv\Scripts\Activate.ps1   then
+             pip install -r requirements.txt
+             If you refuse activation, always call
+             .\.venv\Scripts\python.exe -m ...
+   VERIFY:   python -c "import fastapi, xgboost"
+
+8. SYMPTOM:  "FastAPI not installed" / uvicorn not found
+   CAUSE:    Same as #7 - dependencies missing.
+   FIX:      pip install -r requirements.txt in the activated .venv.
+   VERIFY:   python -m uvicorn --version
+
+9. SYMPTOM:  "pytest is not recognized" (or ModuleNotFoundError: pytest)
+   CAUSE:    requirements-dev.txt was not installed.
+   FIX:      pip install -r requirements-dev.txt
+   VERIFY:   python -m pytest --version
+
+10. SYMPTOM:  Model "unavailable" everywhere in the UI / API returns 503
+    CAUSE:    models/best_model.pkl (or the training dataset / leakage
+              report) is missing on disk.
+    FIX:      Confirm the files exist (see section 14). If you only have a
+              GitHub clone, copy the artifacts from the owner or retrain
+              (section 16). Do not retrain just to test - check first.
+    VERIFY:   GET /api/model/info -> available:true.
+
+11. SYMPTOM:  GET /api/ai/status shows "configuration_required"
+    CAUSE:    NEMOTRON_API_KEY is empty (expected - the AI is optional).
+    FIX:      To enable, add NEMOTRON_API_KEY to the root .env and restart
+              the backend. Otherwise this is normal operation.
+    VERIFY:   GET /api/ai/status -> status "configured" (after adding key).
+
+12. SYMPTOM:  "database connection failed" / /api/health/database error
+    CAUSE:    UDT_DATABASE_URL is set but the PostGIS container is not
+              running or not seeded.
+    FIX:      docker compose up -d database; docker compose ps (must show
+              urban-twin-db healthy); run migrate + seed (section 12).
+              Or leave UDT_DATABASE_URL empty to run artifact-first.
+    VERIFY:   GET /api/health/database -> enabled:true, grid_cells:53802.
+
+13. SYMPTOM:  CORS errors in the browser console
+    CAUSE:    The frontend calls the backend from an origin not listed in
+              UDT_CORS_ORIGINS (usually because /api is NOT going through
+              the Vite proxy).
+    FIX:      In development, use `npm run dev` (the proxy handles /api).
+              In production, set UDT_CORS_ORIGINS to your real origin in
+              .env and restart the backend, or put the frontend behind the
+              provided nginx proxy (deployment/nginx/nginx.conf).
+    VERIFY:   The API call succeeds from the browser.
+
+14. SYMPTOM:  "frontend cannot reach backend" / all API calls fail
+    CAUSE:    Backend not running, or the Vite proxy target is wrong.
+    FIX:      Start the backend (section 17 step 3) and confirm
+              http://localhost:8000/api/health works in a browser first.
+              In dev, vite.config.js proxies /api -> http://localhost:8000.
+    VERIFY:   GET /api/health from PowerShell returns status ok.
+
+15. SYMPTOM:  Vite proxy failure ("http proxy error" in the Vite console)
+    CAUSE:    The backend on port 8000 is down while the frontend is up.
+    FIX:      Start the backend first (or restart it); the proxy forwards
+              only when the backend listens on 8000.
+    VERIFY:   Reload the page; API calls succeed.
+
+16. SYMPTOM:  GIS layer/file missing (404 from /api/data/layers/... or
+              monitoring shows "unavailable")
+    CAUSE:    The data/ folder is incomplete (e.g. fresh GitHub clone).
+    FIX:      Run the GIS pipeline (section 15) or copy data/ from the
+              project owner. The 3D map still works from frontend/public.
+    VERIFY:   GET /api/monitoring/status shows the dataset available.
+
+17. SYMPTOM:  "GeoJSON too large" / the page hangs loading scenario layers
+    CAUSE:    Loading the 53,802-feature GeoJSON directly (or a huge
+              layer) into the browser.
+    FIX:      Use the app as designed: the scenario overlay is fetched on
+              demand and cached; don't manually fetch
+              /api/prediction/heat or scenario geojson into a map unless
+              necessary. Prefer the PNG overlays for background layers.
+    VERIFY:   The Scenario tab renders cells in a few seconds.
+
+18. SYMPTOM:  The map doesn't render / blank map area
+    CAUSE:    Backend down (no layer data), WebGL unavailable, or the
+              frontend can't reach /3d-layers.
+    FIX:      Check the browser console. Enable hardware acceleration /
+              WebGL in the browser. Make sure `npm run dev` serves from
+              frontend (public/ assets must exist). Restart with a hard
+              refresh (Ctrl+F5).
+    VERIFY:   Map tiles + 3D city layers appear.
+
+19. SYMPTOM:  Map canvas is mis-sized (stretched/blank until resized)
+    CAUSE:    The map mounted while its container had zero height.
+    FIX:      This is handled by the app (ResizeObserver + window resize
+              listener call map.resize()); resize the window or toggle a
+              tab to trigger it. If it persists, it is a browser/theme
+              quirk - hard-refresh.
+    VERIFY:   Map fills its panel after resize.
+
+20. SYMPTOM:  Search returns nothing / "search unavailable"
+    CAUSE:    Nominatim unreachable (offline, blocked, rate-limited) or
+              query shorter than 2 characters.
+    FIX:      Check internet; retry after a pause (429 rate limit). The
+              app degrades gracefully to an empty result list.
+    VERIFY:   Typing a Bhubaneswar place name returns results.
+
+21. SYMPTOM:  PowerShell refuses to run Activate.ps1 (execution policy)
+    CAUSE:    PowerShell script execution is restricted by default.
+    FIX:      Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+              (or call .\.venv\Scripts\python.exe directly without
+              activating).
+    VERIFY:   The (.venv) prefix appears in the prompt.
+
+22. SYMPTOM:  "Docker container unhealthy" (urban-twin-backend)
+    CAUSE:    The container's healthcheck (GET /api/health inside the
+              container) fails - usually because data/ or models/ mounts
+              are missing, or a port conflict.
+    FIX:      docker compose logs backend; ensure ./data and ./models
+              exist on the host; fix any startup error; then
+              docker compose up -d --build.
+    VERIFY:   docker compose ps shows (healthy).
+
+23. SYMPTOM:  Docker build failure
+    CAUSE:    Usually a network/pip failure inside the build, or an
+              invalid requirements.txt line.
+    FIX:      Retry after a while (pip flakiness); check the error line;
+              if a package wheel is unavailable for the base image
+              (python:3.11-slim), the requirements pin a compatible
+              version - report the exact error. docker compose build
+              --no-cache as a last resort.
+    VERIFY:   docker compose up -d --build completes.
+
+24. SYMPTOM:  rasterio/geopandas install fails on pip
+    CAUSE:    No prebuilt wheel for your Python version (Windows).
+    FIX:      Use conda-forge (docs/setup.md):
+              conda create -n udt python=3.11 && conda activate udt &&
+              conda install -c conda-forge gdal rasterio geopandas &&
+              pip install -r requirements.txt
+    VERIFY:   python -c "import rasterio, geopandas"
+
+25. SYMPTOM:  Model load error on first prediction (slow first request)
+    CAUSE:    The model is loaded lazily - the FIRST predict/scenario call
+              can take a couple of seconds (and the first run may refit
+              the preprocessor if the cache is missing).
+    FIX:      None needed - subsequent calls are fast. If the preprocessor
+              cache is absent, the first call fits it and writes
+              data/predictions/serving/preprocessor.json.
+    VERIFY:   A second prediction returns in milliseconds.
+
+26. SYMPTOM:  "Optuna trials crash" / CUDA errors during training
+    CAUSE:    XGBoost tried to use a broken GPU path.
+    FIX:      Set AIE_NO_GPU=true in .env (or run with the env var) and
+              re-run ai-engine/main.py.
+    VERIFY:   Training completes on CPU.
+
+
+--------------------------------------------------------------------------------
+ 27. HEALTH CHECKS (API VS DOCKER CONTAINER)
+--------------------------------------------------------------------------------
+
+There are three distinct "health" concepts - don't confuse them:
+
+1. API liveness - GET /api/health
+   Purpose: proves the FastAPI process is up and answering.
+   Test:    Invoke-RestMethod -Method Get -Uri http://localhost:8000/api/health
+   Expected: status = "ok" (always 200 while the process runs).
+
+2. API readiness - GET /api/health/ready
+   Purpose: proves the TRAINED MODEL and the key artifacts exist on disk
+            (model_pkl, leakage_report, dataset_csv, metrics_json).
+   Test:    Invoke-RestMethod -Method Get -Uri http://localhost:8000/api/health/ready
+   Expected: status = "ready" + model_ready = true when all artifacts are
+            present; "not_ready" + missing_artifacts list when not.
+
+3. Docker container health (the "healthy" column in docker compose ps)
+   The backend Dockerfile defines a HEALTHCHECK: every 30 s it fetches
+   http://127.0.0.1:8000/api/health inside the container; 3 failures in a
+   row mark the container "unhealthy". So "healthy" in Docker = the API
+   liveness check inside the container passes (the process is up) - it does
+   NOT prove the model artifacts exist. A container can be "healthy" while
+   /api/health/ready reports "not_ready" (missing model) or while
+   /api/model/info reports model_unavailable.
+
+Test the container health explicitly:
+COMMAND:
+> docker inspect --format "{{.State.Health.Status}}" urban-twin-backend
+EXPECTED OUTPUT:
+> healthy
+
+Also useful:
+COMMAND:
+> docker compose ps
+(STATUS column shows Up ... (healthy) / (unhealthy))
+
+
+--------------------------------------------------------------------------------
+ 28. SECURITY
+--------------------------------------------------------------------------------
+
+  - NEVER commit .env (root or frontend). Both .env files are already in
+    .gitignore; only .env.example templates are committed. If you ever see a
+    .env in a commit, remove it immediately.
+  - NEVER expose the Nemotron key. NEMOTRON_API_KEY is read only by the
+    backend (backend/services/nemotron.py). It must never appear in
+    frontend\.env or in the code - anything with a VITE_ prefix is embedded
+    into the JavaScript bundle and visible to every visitor.
+  - NEVER expose database passwords. POSTGRES_PASSWORD and the password in
+    UDT_DATABASE_URL live in .env only. The compose defaults (admin/password)
+    are for local development only - change them before any public
+    deployment.
+  - NEVER commit credentials: API keys for Copernicus (CDSE_CLIENT_*),
+    OpenAQ, OpenTopography, Mapbox, etc. belong in .env (root) or
+    frontend\.env for the VITE_* public ones - never in source files.
+  - API keys belong server-side: anything sensitive (Nemotron, database,
+    pipeline credentials) is read by the Python backend or the pipelines,
+    not by the browser.
+  - Use .env.example as the template: keep the templates updated with new
+    variables (with empty values) so other developers know what exists.
+  - The existing root .gitignore already covers: .env and variants, *.pkl,
+    *.onnx, data/, models/, logs/, node_modules/, dist/, raster/vector data
+    extensions (*.tif, *.shp, *.gpkg, ...), Python caches and editor files.
+    frontend/.gitignore additionally ignores .env, dist and private docs
+    (WORKFLOW.md, EXPLANATION_GUIDE.md).
+  - The provided nginx config (deployment/nginx/nginx.conf) is a sample for
+    a trusted network; for the internet add TLS (HTTPS) and proper
+    server_name / auth handling - VERIFY IN YOUR ENVIRONMENT.
+
+
+--------------------------------------------------------------------------------
+ 29. BACKUP AND RESTORATION
+--------------------------------------------------------------------------------
+
+What to back up (the irreplaceable pieces):
+  - Source code            - the whole repository (minus the folders below).
+  - trained model          - models/best_model.pkl (+ .onnx). Regenerable
+                             but expensive (~30+ min of training).
+  - GIS datasets           - data/raw (downloads), data/processed
+                             (processed rasters), data/feature_engineering
+                             (the 53,802-cell training grid), data/predictions,
+                             data/outputs. Regenerable but takes hours and
+                             may need provider credentials.
+  - environment config     - root .env and frontend\.env (keep a copy OUT
+                             of the repository - they contain secrets).
+  - database               - if you enabled PostGIS mode: a dump via
+                             docker exec urban-twin-db pg_dump -U admin -d
+                             urban_digital_twin > backup.sql (or pgAdmin).
+
+What can be regenerated and how:
+  - .venv                  - python -m venv --system-site-packages .venv +
+                             pip install -r requirements.txt (+ -dev)
+  - node_modules           - cd frontend && npm install
+  - frontend/dist          - cd frontend && npm run build
+  - data/raw + processed   - cd gis-engine && python main.py (section 15)
+  - training grid          - cd gis-engine/feature_engineering && python main.py
+  - model + outputs        - cd ai-engine && python main.py (section 16)
+  - database contents      - python database/migrate.py + seed/load_artifacts.py
+
+Restore = put the backed-up folders back at the same paths, recreate .env
+from the backup, then start the backend + frontend (section 17).
+
+
+--------------------------------------------------------------------------------
+ 30. COMPLETE VERIFICATION CHECKLIST
+--------------------------------------------------------------------------------
+
+Work through this at the end. Everything is verifiable with the commands
+given in the referenced sections.
+
+  [ ] Git installed                                  (git --version)
+  [ ] Python installed                               (python --version, >= 3.11)
+  [ ] Node.js installed                              (node --version, >= 20.19)
+  [ ] npm installed                                  (npm --version)
+  [ ] Docker installed                               (docker --version)
+  [ ] WSL2 configured                                (wsl --status -> Default Version: 2)
+  [ ] Repository cloned/copied and cd'able           (dir shows docker-compose.yml,
+                                                       backend/, frontend/)
+  [ ] .env configured                                (root .env + frontend\.env exist)
+  [ ] Python dependencies installed                  (pip install -r requirements.txt
+                                                       [+ -dev]; imports OK)
+  [ ] Frontend dependencies installed                (npm install)
+  [ ] Database running (if used)                     (docker compose ps -> urban-twin-db
+                                                       healthy; /api/health/database)
+  [ ] Backend running                                (/api/health returns status ok)
+  [ ] Frontend running                               (http://localhost:5173 loads)
+  [ ] /api/health passes                             (section 19.1)
+  [ ] /api/model/info passes                         (available = True, 58 features)
+  [ ] Prediction works                               (POST /api/prediction/predict -> 200)
+  [ ] Scenarios work                                 (POST /api/simulation/run -> 200,
+                                                      7 scenario names listed)
+  [ ] Cell-level scenarios work                      (GET .../cells -> count 53802)
+  [ ] GIS loads                                      (/api/data/layers + monitoring/status)
+  [ ] 3D map works                                   (section 21 checklist)
+  [ ] Search works                                   (Nominatim returns places)
+  [ ] Analytics work                                 (Analytics tab charts render)
+  [ ] AI configured OR correctly marked              (GET /api/ai/status ->
+      configuration_required                           "configuration_required" or
+                                                       "configured"; never faked)
+  [ ] npm build passes                               (npm run build)
+  [ ] npm lint passes                                (npm run lint)
+  [ ] pytest passes                                  (.\.venv\Scripts\python.exe -m
+                                                       pytest tests/ -v)
+
+
+--------------------------------------------------------------------------------
+ 31. EXACT PORTS
+--------------------------------------------------------------------------------
+
+All ports below were verified in docker-compose.yml, vite.config.js,
+backend/main.py and backend/run.py. Do not guess - these are the real ones.
+
+  SERVICE            PORT   URL                                  PURPOSE
+  -----------------  ----   -----------------------------------  -----------------------------
+  FastAPI backend    8000   http://localhost:8000                API (default; API_PORT overrides)
+  Swagger UI         8000   http://localhost:8000/docs           Interactive API docs
+  ReDoc              8000   http://localhost:8000/redoc          Alternative API docs
+  Vite dev server    5173   http://localhost:5173                HeatSync dashboard (npm run dev)
+  Vite preview       4173   http://localhost:4173                Serves frontend/dist
+                                                                 (Vite default - VERIFY)
+  PostgreSQL/PostGIS 5432   localhost:5432                       Optional database
+                                                                 (POSTGRES_PORT overrides)
+
+Ports 8000 and 5173 are the two you interact with. Change them via .env
+(API_PORT, POSTGRES_PORT) or `npm run dev -- --port <n>` if they conflict.
+
+
+--------------------------------------------------------------------------------
+ 32. DIRECTORY STRUCTURE
+--------------------------------------------------------------------------------
+
+The relevant project tree (generated data files are not listed
+individually):
+
+  urban-digital-twin/
+  |-- docker-compose.yml          # backend + optional PostGIS stack
+  |-- requirements.txt            # Python runtime dependencies
+  |-- requirements-dev.txt        # pytest, ruff, ...
+  |-- .env.example                # backend env template (copy to .env)
+  |-- boundary.geojson            # study-area boundary (required)
+  |-- scenario.geojson            # scenario reference geometry
+  |-- Makefile                    # optional make shortcuts
+  |
+  |-- frontend/                   # HeatSync React dashboard
+  |   |-- package.json            #   npm scripts (dev/build/lint/preview)
+  |   |-- vite.config.js          #   /api proxy -> localhost:8000
+  |   |-- .env.example            #   VITE_* env template
+  |   |-- public/
+  |   |   |-- 3d-layers/          #   browser-safe OSM GeoJSON (buildings,
+  |   |   |                       #     roads, green, water, trees, boundary)
+  |   |   |-- overlays/           #   PNG overlays + overlays.json manifest
+  |   |   `-- terrain/            #   MapLibre DEM tiles (terrarium)
+  |   `-- src/
+  |       |-- App.jsx             #   layout, tabs, layer state
+  |       |-- components/         #   map, layers, scenario, analytics, AI
+  |       |-- services/           #   backend clients, geocoding, thematic data
+  |       |-- engine/             #   microclimate simulation engine
+  |       `-- data/               #   pilot dataset (Khandagiri & ITER)
+  |
+  |-- backend/                    # FastAPI service
+  |   |-- main.py                 #   application factory
+  |   |-- run.py                  #   python -m backend.run
+  |   |-- api/                    #   routers (health, data, prediction, ...)
+  |   |-- schemas/                #   pydantic models
+  |   |-- services/               #   serving, simulation, nemotron, catalog
+  |   |-- config/                 #   settings (UDT_*), logging
+  |   |-- middleware/             #   errors, request logging
+  |   `-- utils/                  #   ai-engine import helpers
+  |
+  |-- ai-engine/                  # ML pipeline (train/explain/export)
+  |   |-- main.py                 #   11-step end-to-end pipeline
+  |   |-- config.py               #   scenarios + model/optuna settings
+  |   |-- scenario_simulator.py   #   perturbation engine (used by the API)
+  |   `-- ... (data_loader, feature_selection, model_training, ...)
+  |
+  |-- gis-engine/                 # data pipeline
+  |   |-- main.py                 #   orchestrator (download + process)
+  |   |-- config.py               #   all pipeline settings
+  |   |-- download_*.py           #   sentinel / landsat / dem / weather / aqi
+  |   |-- process_*.py            #   processing stages
+  |   |-- extract_osm_layers.py   #   OSM layer extraction
+  |   `-- feature_engineering/    #   100 m grid -> training dataset
+  |
+  |-- scenario-engine/            # standalone simulation library
+  |   |-- engine.py
+  |   `-- tree/ cool_roof/ green_corridor/ comparison/
+  |
+  |-- database/                   # optional PostGIS
+  |   |-- schema/init.sql         #   auto-run by Docker on first start
+  |   |-- migrations/             #   versioned SQL migrations
+  |   |-- migrate.py              #   migration runner
+  |   `-- seed/load_artifacts.py  #   loads grid/predictions/simulations
+  |
+  |-- deployment/
+  |   |-- docker/Dockerfile       #   backend image (python:3.11-slim)
+  |   |-- nginx/nginx.conf        #   sample reverse proxy
+  |   |-- env/                    #   backend.env.example, frontend.env.example
+  |   `-- deploy.sh               #   build + run helper
+  |
+  |-- data/                       # pipeline outputs (NOT committed)
+  |   |-- raw/                    #   sentinel, landsat, dem, weather, aqi, osm
+  |   |-- processed/              #   ndvi, lst, landcover, aqi, terrain, ...
+  |   |-- feature_engineering/    #   training_dataset.csv (+ .geojson)
+  |   |-- predictions/            #   predictions.csv, Predicted_LST.*
+  |   |-- outputs/                #   metrics, leaderboard, reports, SHAP,
+  |   |                           #     scenario caches
+  |   |-- statistics/  plots/  external/
+  |
+  |-- models/                     # NOT committed
+  |   |-- best_model.pkl          #   trained XGBRegressor (used for inference)
+  |   `-- best_model.onnx         #   ONNX export (informational)
+  |
+  |-- tests/                      # pytest suite
+  |-- scripts/                    # utility scripts
+  |-- docs/                       # documentation (incl. this guide)
+  `-- .gitignore / .dockerignore / ruff.toml / LICENSE / README.md
+
+
+--------------------------------------------------------------------------------
+ 33. THE "ONE COMMAND" STARTUP
+--------------------------------------------------------------------------------
+
+There is no single command that starts the entire app, because the frontend
+is intentionally not part of the Docker stack (the compose file starts only
+backend + database). The shortest reliable sequence is TWO commands (plus
+browser):
+
+  Terminal 1 (backend):
+  > cd F:\urban-digital-twin
+  > docker compose up -d --build
+
+  Terminal 2 (frontend):
+  > cd F:\urban-digital-twin\frontend
+  > npm run dev
+
+Then open http://localhost:5173.
+
+Alternatives that match the repository:
+  - Makefile (if you have `make`, e.g. Git Bash / WSL):
+      make docker-up      (same as docker compose up -d --build)
+      make serve          (local uvicorn backend)
+  - deployment/deploy.sh (bash, requires data/ to exist):
+      ./deployment/deploy.sh        (docker build + compose up)
+      ./deployment/deploy.sh --no-db (backend container only)
+  - Full local mode (no Docker at all):
+      .\.venv\Scripts\Activate.ps1 && uvicorn backend.main:app --reload
+      (second window) cd frontend && npm run dev
+
+
+--------------------------------------------------------------------------------
+ 34. VERIFIED FACTS AND ACCURACY NOTES
+--------------------------------------------------------------------------------
+
+This guide is based on the ACTUAL repository. The following were verified
+directly from the files (and, where noted, by running the API):
+
+  - docker-compose.yml: services backend (urban-twin-backend) and database
+    (urban-twin-db, postgis/postgis:15-3.3); ports 8000/5432; read-only
+    mounts of ./data and ./models; schema init via docker-entrypoint-initdb.d.
+  - Dockerfile (deployment/docker/Dockerfile): python:3.11-slim, uvicorn
+    backend.main:app on 0.0.0.0:8000, HEALTHCHECK on /api/health.
+  - requirements.txt / requirements-dev.txt contents (installed versions
+    listed in section 5 come from the actual .venv on the reference machine).
+  - frontend/package.json: scripts dev/build/lint(preview), lint = oxlint;
+    Vite 8.2 requires Node ^20.19.0 || >=22.12.0 (checked in the installed
+    vite package).
+  - vite.config.js: /api proxy -> http://localhost:8000.
+  - backend/config/settings.py: UDT_* variables, artifact-first defaults.
+  - backend/services/nemotron.py: NEMOTRON_* variables and defaults.
+  - Every API endpoint listed in section 19 was read from backend/api/*.py,
+    and key responses (health, model/info, ai/status, predict, scenarios)
+    were verified by actually running the backend.
+  - Model facts (58 features, XGBRegressor, 53,802 cells, metrics) were
+    read from models/, data/outputs/metrics.json and the leakage report.
+  - Scenario names and perturbations were read from ai-engine/config.py and
+    confirmed against the running API.
+  - GIS dataset locations were verified by listing data/, frontend/public/
+    and the repo root.
+  - The frontend search behaviour (Nominatim, debounce, cache) was read from
+    frontend/src/services/geocoding.js; the 3D map checklist was derived
+    from frontend/src/components/DigitalTwinMap3D.jsx and App.jsx.
+
+Things deliberately marked "VERIFY IN YOUR ENVIRONMENT" because the
+repository does not pin them: exact training runtime, Vite preview port
+(4173 is Vite's default), downloaded file sizes on your machine, and any
+provider API keys you must obtain yourself.
+
+If you find a difference between this guide and the repository behaviour,
+trust the repository - the guide was written from the code, not the other
+way around.
+
+--------------------------------------------------------------------------------
+ END OF MANUAL
+--------------------------------------------------------------------------------

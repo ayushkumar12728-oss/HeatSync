@@ -1,0 +1,1 @@
+"""Cool-roof intervention scenarios."""

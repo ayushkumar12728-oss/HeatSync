@@ -31,3 +31,4 @@ postgres_data/
 Thumbs.db
 
 data/predictions/Predicted_LST.geojson
+data/predictions/Predicted_LST.geojson

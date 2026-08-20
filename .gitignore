@@ -29,3 +29,5 @@ postgres_data/
 .idea/
 .DS_Store
 Thumbs.db
+
+data/predictions/Predicted_LST.geojson

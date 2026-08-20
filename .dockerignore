@@ -49,3 +49,5 @@ Thumbs.db
 # Temporary files
 tmp/
 temp/
+
+data/predictions/Predicted_LST.geojson

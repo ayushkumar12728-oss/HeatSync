@@ -83,27 +83,41 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # --- routers ----------------------------------------------------------
     from backend.api import (
-        ai,
-        city,
-        dashboard,
-        data,
-        environment,
-        explainability,
-        health,
-        model,
-        monitoring,
-        prediction,
-        routing,
-        search,
-        simulation,
-        system,
-    )
+    ai,
+    city,
+    dashboard,
+    data,
+    environment,
+    explainability,
+    health,
+    live,
+    model,
+    monitoring,
+    prediction,
+    routing,
+    search,
+    simulation,
+    system,
+)
 
-    for module in (health, data, prediction, simulation, explainability,
-                   dashboard, monitoring, environment, model, ai,
-                   city, routing, search, system):
-        app.include_router(module.router)
-
+    for module in (
+    health,
+    data,
+    prediction,
+    simulation,
+    explainability,
+    dashboard,
+    monitoring,
+    environment,
+    model,
+    ai,
+    city,
+    routing,
+    search,
+    system,
+    live,
+):
+     app.include_router(module.router)
     @app.get("/")
     def root() -> dict:
         """Root endpoint."""

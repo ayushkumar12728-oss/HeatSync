@@ -31,7 +31,7 @@ backend/logs
 
 # Large runtime artifacts
 data/
-models/
+
 
 # Local database
 postgres_data/

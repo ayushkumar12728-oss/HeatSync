@@ -31,6 +31,12 @@ COPY scenario-engine /app/scenario-engine
 # ML models
 COPY models /app/models
 
+COPY boundary.geojson /app/boundary.geojson
+
+COPY data/feature_engineering /app/data/feature_engineering
+COPY data/predictions /app/data/predictions
+COPY data/raw/osm/layers /app/data/raw/osm/layers
+
 RUN mkdir -p /app/data /app/backend/logs
 
 EXPOSE 8000

@@ -1,9 +1,25 @@
 ﻿// In development, API calls go through the Vite dev proxy (/api -> backend),
 // which avoids CORS entirely. In production builds the absolute backend URL is
 // used (VITE_BACKEND_API_URL, falling back to the local FastAPI default).
-const DEFAULT_API_BASE = import.meta.env.DEV ? '/api' : 'http://localhost:8000/api';
+const DEFAULT_API_BASE = '/api';
 
-export const API_BASE = (import.meta.env.VITE_BACKEND_API_URL || DEFAULT_API_BASE).replace(/\/$/, '');
+function normalizeApiBase(rawUrl) {
+  if (!rawUrl) return DEFAULT_API_BASE;
+
+  let url = rawUrl.trim().replace(/\/+$/, '');
+
+  if (url && !url.endsWith('/api')) {
+    url = `${url}/api`;
+  }
+
+  return url;
+}
+
+export const API_BASE = normalizeApiBase(
+  import.meta.env.VITE_BACKEND_API_URL
+);
+
+
 
 export async function fetchJson(path, options = {}) {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;

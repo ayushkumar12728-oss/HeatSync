@@ -29,9 +29,11 @@ backend/logs
 .env.*
 !.env.example
 
-# Large runtime artifacts
-data/
-
+# Large runtime artifacts not needed in the API image
+data/processed/
+data/raw/satellite/
+data/raw/weather/
+data/raw/landsat/
 
 # Local database
 postgres_data/

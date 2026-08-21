@@ -38,6 +38,11 @@ COPY boundary.geojson /app/boundary.geojson
 COPY data/feature_engineering/training_dataset.csv \
      /app/data/feature_engineering/training_dataset.csv
 
+# Preprocessor cache (avoids re-fitting on startup, which triggers the
+# ai-engine DataLoader and its "GeoJSON grid not found" warning)
+COPY data/predictions/serving/preprocessor.json \
+     /app/data/predictions/serving/preprocessor.json
+
 # Required prediction artifacts
 COPY data/predictions/Predicted_LST.png \
      /app/data/predictions/Predicted_LST.png

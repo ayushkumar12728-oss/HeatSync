@@ -123,6 +123,29 @@ class ServingContext:
             except Exception as exc:
                 log.warning("Startup eager-load failed (will retry lazily): %s", exc)
 
+        # --- GeoJSON resolution diagnostic ---
+        self._log_geojson_status()
+
+    def _log_geojson_status(self) -> None:
+        """Log the resolved GeoJSON path, existence, feature count, and CRS."""
+        geojson_path = self.settings.dataset_geojson
+        exists = geojson_path.exists()
+        log.info("GeoJSON grid diagnostic:")
+        log.info("  resolved path : %s", geojson_path)
+        log.info("  exists        : %s", exists)
+        if exists:
+            try:
+                with open(geojson_path, encoding="utf-8") as fh:
+                    gj = json.load(fh)
+                features = gj.get("features", [])
+                crs = gj.get("crs", {}).get("properties", {}).get("name", "unknown")
+                log.info("  feature count : %d", len(features))
+                log.info("  CRS           : %s", crs)
+            except Exception as exc:
+                log.warning("  Could not read GeoJSON metadata: %s", exc)
+        else:
+            log.warning("  File NOT found — spatial outputs and satellite per-cell data will be unavailable.")
+
     # ------------------------------------------------------------------ #
     # Public properties
     # ------------------------------------------------------------------ #

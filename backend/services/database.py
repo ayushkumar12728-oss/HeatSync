@@ -34,9 +34,25 @@ class DatabaseService:
         if not self.enabled:
             return None
         if self._engine is None:
+            url = self.settings.database_url
+            # Validate URL format — only PostgreSQL dialects are supported.
+            # Supabase provides both an HTTPS REST URL (which SQLAlchemy cannot
+            # use) and a postgres:// connection string.  When the user sets
+            # UDT_DATABASE_URL to the HTTPS URL, SQLAlchemy raises:
+            #   "Can't load plugin: sqlalchemy.dialects:https"
+            if not url.startswith(("postgresql://", "postgresql+psycopg", "postgres://")):
+                self._unavailable_reason = (
+                    f"Invalid database URL scheme: '{url.split('://', 1)[0]}://'. "
+                    "Expected a postgresql:// connection string from the Supabase "
+                    "dashboard (Settings → Database → Connection string → URI). "
+                    "The HTTPS REST API URL is not a valid SQLAlchemy connection string."
+                )
+                log.warning("Database URL validation failed: %s", self._unavailable_reason)
+                self._engine = False
+                return None
             try:
                 from sqlalchemy import create_engine
-                self._engine = create_engine(self.settings.database_url, pool_pre_ping=True)
+                self._engine = create_engine(url, pool_pre_ping=True)
             except Exception as exc:
                 self._unavailable_reason = str(exc)
                 log.error("Database unavailable: %s", exc)

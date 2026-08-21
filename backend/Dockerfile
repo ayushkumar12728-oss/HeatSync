@@ -34,9 +34,11 @@ COPY models /app/models
 # Boundary
 COPY boundary.geojson /app/boundary.geojson
 
-# Required training dataset
+# Required training dataset (CSV + GeoJSON with satellite per-cell data)
 COPY data/feature_engineering/training_dataset.csv \
      /app/data/feature_engineering/training_dataset.csv
+COPY data/feature_engineering/training_dataset.geojson \
+     /app/data/feature_engineering/training_dataset.geojson
 
 # Preprocessor cache (avoids re-fitting on startup, which triggers the
 # ai-engine DataLoader and its "GeoJSON grid not found" warning)

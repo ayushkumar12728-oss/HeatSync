@@ -186,14 +186,30 @@ def _satellite_report(settings: Settings) -> dict:
 
 
 def _terrain_report(settings: Settings) -> dict:
-    """Terrain tile availability — real file system check."""
+    """Terrain tile availability — real file system check.
+
+    In production Docker the frontend is not copied into the image, so
+    terrain tiles are served by Netlify directly (from /terrain/...). The
+    backend only reports availability when tiles exist locally.
+    """
     import os
-    terrain_dir = settings.project_root / "frontend" / "public" / "terrain"
-    if not terrain_dir.exists():
+    # Check multiple possible locations (local dev vs Docker)
+    terrain_dirs = [
+        settings.project_root / "frontend" / "public" / "terrain",
+        settings.project_root / "terrain",
+        "/app/frontend/public/terrain",  # Docker (if ever added)
+    ]
+    terrain_dir = None
+    for td in terrain_dirs:
+        if td.exists():
+            terrain_dir = td
+            break
+    if terrain_dir is None:
         return {
             "status": "UNAVAILABLE",
             "source": "Copernicus DEM",
-            "reason": "Terrain directory not found",
+            "reason": "Terrain tiles not found locally (served by Netlify in production)",
+            "note": "Terrain tiles are frontend-only assets served from Netlify",
         }
 
     tile_count = 0
@@ -256,9 +272,18 @@ def system_health(
     )
     overall = "healthy" if core_ok else "degraded"
 
+    # Build version marker — proves which code is deployed
+    import hashlib
+    _build_hash = hashlib.sha256(
+        f"{settings.version}:{settings.active_model_version}"
+        .encode()
+    ).hexdigest()[:8]
+
     return JSONResponse(content={
         "status": overall,
         "generated_at": datetime.now(UTC).isoformat(),
+        "api_build_version": f"{settings.version}-{_build_hash}",
+        "active_model_version": settings.active_model_version,
         "backend": {
             "status": "online",
             "app": settings.app_name,
@@ -281,6 +306,14 @@ def system_health(
         "satellite": satellite,
         "terrain": _terrain_report(settings),
         "search": search,
+        "geojson_availability": {
+            "training_grid_csv": settings.dataset_csv.exists(),
+            "training_grid_geojson": settings.dataset_geojson.exists(),
+            "boundary": settings.boundary_geojson.exists(),
+            "model_pkl": settings.model_pkl.exists(),
+            "preprocessor_cache": settings.preprocessor_cache.exists(),
+            "leakage_report": settings.leakage_report.exists(),
+        },
         "ai": {
             "status": ai.get("status"),
             "provider": ai.get("provider"),
@@ -310,17 +343,29 @@ def system_terrain(settings: Settings = Depends(get_settings)) -> JSONResponse:
 
     Verifies that terrain tiles actually exist on disk and are valid PNG
     files. Does NOT trust the source object creation — verifies real files.
+
+    Note: In production Docker, terrain tiles are served by Netlify
+    directly. The backend only verifies local availability.
     """
     import os
-    terrain_dir = settings.project_root / "frontend" / "public" / "terrain"
-    if not terrain_dir.exists():
+    terrain_dirs = [
+        settings.project_root / "frontend" / "public" / "terrain",
+        settings.project_root / "terrain",
+    ]
+    terrain_dir = None
+    for td in terrain_dirs:
+        if td.exists():
+            terrain_dir = td
+            break
+    if terrain_dir is None:
         return JSONResponse(content={
             "available": False,
             "source": "Copernicus DEM",
             "format": "Terrarium",
             "tiles_verified": False,
-            "reason": f"Terrain directory not found: {terrain_dir}",
+            "reason": "Terrain tiles not found locally (served by Netlify in production)",
             "tile_count": 0,
+            "note": "Terrain tiles are frontend-only assets served from Netlify",
         })
 
     # Count actual PNG files

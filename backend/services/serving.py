@@ -111,15 +111,16 @@ class ServingContext:
         self._prediction_cache_lock = threading.RLock()
 
         # --- Eager startup loading ---
-        # Pre-load model + features + static matrix so the first /heat/current
+        # Pre-load model + features so the first /heat/current
         # request doesn't pay the full cold-start penalty.
+        # NOTE: The static feature matrix (53,802 × 58) is loaded lazily
+        # on first grid prediction request to reduce cold-start time.
         if self.model_available:
             try:
                 _ = self.model
                 _ = self.features
                 _ = self.preprocessor
-                self._load_static_feature_matrix()
-                log.info("Startup eager-load complete — model, features, and static matrix ready.")
+                log.info("Startup eager-load complete — model, features, and preprocessor ready.")
             except Exception as exc:
                 log.warning("Startup eager-load failed (will retry lazily): %s", exc)
 

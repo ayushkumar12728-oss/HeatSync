@@ -150,19 +150,16 @@ def current_heat(serving: ServingContext = Depends(get_serving)) -> JSONResponse
 
 
 @router.get("/heat/current/grid")
-def current_heat_grid(serving: ServingContext = Depends(get_serving)) -> JSONResponse:
-    """Full spatial prediction grid: 53,802 cells with predicted LST.
+def current_heat_grid(
+    serving: ServingContext = Depends(get_serving),
+) -> JSONResponse:
+    """Return the current 53,802-cell predicted LST grid.
 
-    Returns a list of per-cell predicted LST from the XGBoost model on the
-    current feature grid. Each item carries:
-    - cell_id: Grid_ID
-    - predicted_lst: XGBoost predicted land surface temperature (°C)
-    - source: "XGBoost"
-    - generated_at: timestamp
-
-    The MapLibre current heat layer consumes this endpoint and merges with
-    authoritative grid geometry from /api/data/layers/predicted-lst.
+    Uses ServingContext's cached fast-path instead of constructing a new
+    SimulationService for every request. This avoids rebuilding the full
+    simulation pipeline and greatly reduces Render memory/CPU usage.
     """
+
     if not serving.model_available:
         return JSONResponse(
             status_code=503,
@@ -175,35 +172,41 @@ def current_heat_grid(serving: ServingContext = Depends(get_serving)) -> JSONRes
         )
 
     try:
-        from backend.services.simulation import SimulationService
-        sim = SimulationService(serving.settings, serving)
-        result = sim.get_current_grid_predictions()
+        # IMPORTANT:
+        # Do NOT create SimulationService here.
+        # ServingContext already has the optimized/cached grid predictor.
+        result = serving.get_current_grid_predictions_fast()
 
         generated_at = datetime.now(UTC).isoformat()
 
-        # Get snapshot ID from live data manager
         snapshot_id = None
         try:
-            from backend.services.live_data_manager.snapshot import get_current_snapshot
-            snap = get_current_snapshot()
-            snapshot_id = snap.snapshot_id
-        except Exception:
-            pass
+            from backend.services.live_data_manager.snapshot import (
+                get_current_snapshot,
+            )
 
-        return JSONResponse(content={
-            "success": True,
-            "status": "success",
-            "data_source": "current",
-            "cells": result["count"],
-            "generated_at": generated_at,
-            "model_version": serving.model_version,
-            "feature_count": len(serving.features),
-            "summary": result["summary"],
-            "predictions": result["cells"],
-            "snapshot_id": snapshot_id,
-        })
+            snapshot_id = get_current_snapshot().snapshot_id
+        except Exception as exc:
+            log.warning("Could not obtain snapshot ID: %s", exc)
+
+        return JSONResponse(
+            content={
+                "success": True,
+                "status": "success",
+                "data_source": "current",
+                "cells": result["count"],
+                "generated_at": generated_at,
+                "model_version": serving.model_version,
+                "feature_count": len(serving.features),
+                "summary": result["summary"],
+                "predictions": result["cells"],
+                "snapshot_id": snapshot_id,
+            }
+        )
+
     except Exception as exc:
-        log.error("Current heat grid prediction failed: %s", exc)
+        log.exception("Current heat grid prediction failed")
+
         return JSONResponse(
             status_code=500,
             content={

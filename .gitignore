@@ -21,7 +21,6 @@ frontend/dist/
 *.log
 backend/logs/
 
-data/
 
 postgres_data/
 

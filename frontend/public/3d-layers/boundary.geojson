@@ -1,8 +1,3 @@
-{
-"type": "FeatureCollection",
-"name": "boundary",
-"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
-"features": [
-{ "type": "Feature", "properties": { "name": "Bhubaneswar", "description": "City boundary for Sentinel-2 processing" }, "geometry": { "type": "Polygon", "coordinates": [ [ [ 85.9125325, 20.1279047 ], [ 85.9125325, 20.3992714 ], [ 85.742491, 20.3992714 ], [ 85.742491, 20.1279047 ], [ 85.9125325, 20.1279047 ] ] ] } }
-]
-}
+version https://git-lfs.github.com/spec/v1
+oid sha256:cf712fc921df755103f278c2d07f9d187999baa1f4ff0ddefdc04c6ead11cb90
+size 472

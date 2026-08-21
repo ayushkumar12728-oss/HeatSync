@@ -1,0 +1,523 @@
+{
+  "pipeline": "GIS Feature Engineering - Urban Heat Island training dataset",
+  "crs": "EPSG:32645",
+  "expected_crs": "EPSG:32645",
+  "crs_valid": true,
+  "rows_before_cleaning": 53802,
+  "invalid_geometries_fixed": 0,
+  "rows_dropped_empty_geometry": 0,
+  "duplicate_rows_removed": 0,
+  "rows_after_dedup": 53802,
+  "missing_before_fill": {
+    "MeanNDVI": {
+      "count": 42,
+      "pct": 0.08
+    },
+    "MaxNDVI": {
+      "count": 42,
+      "pct": 0.08
+    },
+    "MinNDVI": {
+      "count": 42,
+      "pct": 0.08
+    },
+    "GreenCover": {
+      "count": 42,
+      "pct": 0.08
+    },
+    "VegetationDensity": {
+      "count": 42,
+      "pct": 0.08
+    },
+    "VegDensityClass": {
+      "count": 42,
+      "pct": 0.08
+    },
+    "LandCoverClass": {
+      "count": 42,
+      "pct": 0.08
+    },
+    "MeanLST": {
+      "count": 342,
+      "pct": 0.64
+    },
+    "MaxLST": {
+      "count": 342,
+      "pct": 0.64
+    },
+    "MinLST": {
+      "count": 342,
+      "pct": 0.64
+    },
+    "MeanElevation": {
+      "count": 53,
+      "pct": 0.1
+    },
+    "MeanSlope": {
+      "count": 53,
+      "pct": 0.1
+    },
+    "MeanAQI": {
+      "count": 623,
+      "pct": 1.16
+    },
+    "MeanPM25": {
+      "count": 623,
+      "pct": 1.16
+    },
+    "MeanPM10": {
+      "count": 623,
+      "pct": 1.16
+    },
+    "MeanNO2": {
+      "count": 623,
+      "pct": 1.16
+    },
+    "MeanSO2": {
+      "count": 623,
+      "pct": 1.16
+    },
+    "MeanCO": {
+      "count": 623,
+      "pct": 1.16
+    },
+    "MeanO3": {
+      "count": 623,
+      "pct": 1.16
+    },
+    "VegetationCoolingIndex": {
+      "count": 42,
+      "pct": 0.08
+    },
+    "HeatVulnerabilityIndex": {
+      "count": 42,
+      "pct": 0.08
+    },
+    "Target_LST": {
+      "count": 342,
+      "pct": 0.64
+    }
+  },
+  "columns_dropped_excessive_missing": [],
+  "missing_value_fill_method": "median",
+  "rows_final": 53802,
+  "columns_final": 87,
+  "feature_columns": [
+    "BuildingCount",
+    "BuildingCoveragePct",
+    "AvgBuildingFootprint",
+    "BuildingDensity",
+    "RoadLength",
+    "RoadIntersectionCount",
+    "DistToMajorRoad",
+    "RoadDensity",
+    "RoadIntersectionDensity",
+    "TreeCount",
+    "TreeDensity",
+    "GreenSpacePct",
+    "LandUse_ResidentialPct",
+    "LandUse_CommercialPct",
+    "LandUse_IndustrialPct",
+    "LandUse_InstitutionalPct",
+    "LandUse_AgriculturePct",
+    "LandUse_GreenPct",
+    "LandUse_RailwayPct",
+    "LandUse_OtherPct",
+    "DistToPark",
+    "DistToWater",
+    "DistToHospital",
+    "DistToSchool",
+    "BusStopCount",
+    "DistToBusStop",
+    "BusStopDensity",
+    "HospitalCount",
+    "SchoolCount",
+    "MeanNDVI",
+    "MaxNDVI",
+    "MinNDVI",
+    "GreenCover",
+    "VegetationDensity",
+    "LandCover_WaterPct",
+    "LandCover_VegetationPct",
+    "LandCover_BuiltupPct",
+    "LandCover_BareLandPct",
+    "MeanLST",
+    "MaxLST",
+    "MinLST",
+    "MeanElevation",
+    "MeanSlope",
+    "Aspect",
+    "MeanAQI",
+    "MeanPM25",
+    "MeanPM10",
+    "MeanNO2",
+    "MeanSO2",
+    "MeanCO",
+    "MeanO3",
+    "Temperature",
+    "Temperature_7d",
+    "Humidity",
+    "Humidity_7d",
+    "WindSpeed",
+    "WindSpeed_7d",
+    "Pressure",
+    "Pressure_7d",
+    "SolarRadiation",
+    "SolarRadiation_7d",
+    "Rainfall",
+    "Rainfall_7d",
+    "HeatIndex",
+    "HeatIndex_7d",
+    "Temperature_MonthlyMean",
+    "Humidity_MonthlyMean",
+    "WindSpeed_MonthlyMean",
+    "Pressure_MonthlyMean",
+    "SolarRadiation_MonthlyMean",
+    "Rainfall_MonthlyMean",
+    "HeatIndex_MonthlyMean",
+    "ImperviousSurfaceRatio",
+    "GreenToBuiltRatio",
+    "CoolingDistanceIndex",
+    "RoadExposureIndex",
+    "VegetationCoolingIndex",
+    "TerrainExposureIndex",
+    "HeatVulnerabilityIndex",
+    "Target_LST"
+  ],
+  "n_features": 80,
+  "categorical_columns": [
+    "Season",
+    "LandCoverClass",
+    "VegDensityClass",
+    "Month"
+  ],
+  "target_column": "Target_LST",
+  "data_ranges": {
+    "BuildingCount": [
+      0.0,
+      52.0
+    ],
+    "BuildingCoveragePct": [
+      0.0,
+      111.91476423999194
+    ],
+    "AvgBuildingFootprint": [
+      0.0,
+      25892.207774388575
+    ],
+    "BuildingDensity": [
+      0.0,
+      5200.0
+    ],
+    "RoadLength": [
+      0.0,
+      919.3601439922442
+    ],
+    "RoadIntersectionCount": [
+      0.0,
+      20.0
+    ],
+    "DistToMajorRoad": [
+      0.020025509402340644,
+      11594.634712476887
+    ],
+    "RoadDensity": [
+      0.0,
+      91936.01439922441
+    ],
+    "RoadIntersectionDensity": [
+      0.0,
+      2000.0
+    ],
+    "TreeCount": [
+      0.0,
+      9.0
+    ],
+    "TreeDensity": [
+      0.0,
+      900.0
+    ],
+    "GreenSpacePct": [
+      0.0,
+      100.0
+    ],
+    "LandUse_ResidentialPct": [
+      0.0,
+      100.0
+    ],
+    "LandUse_CommercialPct": [
+      0.0,
+      100.0
+    ],
+    "LandUse_IndustrialPct": [
+      0.0,
+      100.0
+    ],
+    "LandUse_InstitutionalPct": [
+      0.0,
+      100.0
+    ],
+    "LandUse_AgriculturePct": [
+      0.0,
+      84.43100065469663
+    ],
+    "LandUse_GreenPct": [
+      0.0,
+      100.0
+    ],
+    "LandUse_RailwayPct": [
+      0.0,
+      100.0
+    ],
+    "LandUse_OtherPct": [
+      0.0,
+      44.39634004720646
+    ],
+    "DistToPark": [
+      0.0,
+      14190.080798015884
+    ],
+    "DistToWater": [
+      0.0,
+      12223.43199295807
+    ],
+    "DistToHospital": [
+      0.0,
+      14589.82693895747
+    ],
+    "DistToSchool": [
+      0.0,
+      15800.49005982688
+    ],
+    "BusStopCount": [
+      0.0,
+      2.0
+    ],
+    "DistToBusStop": [
+      9.844699751689715,
+      14729.958252649782
+    ],
+    "BusStopDensity": [
+      0.0,
+      200.0
+    ],
+    "HospitalCount": [
+      0.0,
+      3.0
+    ],
+    "SchoolCount": [
+      0.0,
+      3.0
+    ],
+    "MeanNDVI": [
+      -0.08675244338810444,
+      0.6584593921899795
+    ],
+    "MaxNDVI": [
+      -0.043716851621866226,
+      0.7491710782051086
+    ],
+    "MinNDVI": [
+      -0.2976413667201996,
+      0.6306352019309998
+    ],
+    "GreenCover": [
+      0.0,
+      100.0
+    ],
+    "VegetationDensity": [
+      1.0,
+      5.0
+    ],
+    "LandCover_WaterPct": [
+      0.0,
+      100.0
+    ],
+    "LandCover_VegetationPct": [
+      0.0,
+      100.0
+    ],
+    "LandCover_BuiltupPct": [
+      0.0,
+      100.0
+    ],
+    "LandCover_BareLandPct": [
+      0.0,
+      100.0
+    ],
+    "MeanLST": [
+      30.351918538411457,
+      52.048492431640625
+    ],
+    "MaxLST": [
+      30.484649658203125,
+      52.315521240234375
+    ],
+    "MinLST": [
+      30.173614501953125,
+      51.645599365234375
+    ],
+    "MeanElevation": [
+      3.0,
+      132.65954971313477
+    ],
+    "MeanSlope": [
+      0.0,
+      24.0989318423801
+    ],
+    "Aspect": [
+      0.0,
+      359.9839786970459
+    ],
+    "MeanAQI": [
+      80.32891845703125,
+      110.25242614746094
+    ],
+    "MeanPM25": [
+      46.838661193847656,
+      56.86539077758789
+    ],
+    "MeanPM10": [
+      93.47936248779297,
+      114.92536926269531
+    ],
+    "MeanNO2": [
+      31.33589744567871,
+      41.45603942871094
+    ],
+    "MeanSO2": [
+      15.036212921142578,
+      18.415634155273438
+    ],
+    "MeanCO": [
+      743.05126953125,
+      828.978271484375
+    ],
+    "MeanO3": [
+      41.12853240966797,
+      48.32941436767578
+    ],
+    "Temperature": [
+      32.15,
+      32.15
+    ],
+    "Temperature_7d": [
+      31.465714285714284,
+      31.465714285714284
+    ],
+    "Humidity": [
+      63.49,
+      63.49
+    ],
+    "Humidity_7d": [
+      62.88857142857143,
+      62.88857142857143
+    ],
+    "WindSpeed": [
+      3.72,
+      3.72
+    ],
+    "WindSpeed_7d": [
+      3.0957142857142856,
+      3.0957142857142856
+    ],
+    "Pressure": [
+      995.3,
+      995.3
+    ],
+    "Pressure_7d": [
+      996.885714285714,
+      996.885714285714
+    ],
+    "SolarRadiation": [
+      277.5208333333333,
+      277.5208333333333
+    ],
+    "SolarRadiation_7d": [
+      274.12559523809523,
+      274.12559523809523
+    ],
+    "Rainfall": [
+      0.11,
+      0.11
+    ],
+    "Rainfall_7d": [
+      1.234285714285715,
+      1.234285714285715
+    ],
+    "HeatIndex": [
+      38.54993119426516,
+      38.54993119426516
+    ],
+    "HeatIndex_7d": [
+      36.74134274806016,
+      36.74134274806016
+    ],
+    "Temperature_MonthlyMean": [
+      32.18709677419355,
+      32.18709677419355
+    ],
+    "Humidity_MonthlyMean": [
+      62.4483870967742,
+      62.4483870967742
+    ],
+    "WindSpeed_MonthlyMean": [
+      3.002903225806452,
+      3.002903225806452
+    ],
+    "Pressure_MonthlyMean": [
+      996.4129032258064,
+      996.4129032258064
+    ],
+    "SolarRadiation_MonthlyMean": [
+      258.05147849462367,
+      258.05147849462367
+    ],
+    "Rainfall_MonthlyMean": [
+      2.5596774193548386,
+      2.5596774193548386
+    ],
+    "HeatIndex_MonthlyMean": [
+      38.34503780261585,
+      38.34503780261585
+    ],
+    "ImperviousSurfaceRatio": [
+      0.0,
+      1.0
+    ],
+    "GreenToBuiltRatio": [
+      9.9999999e-09,
+      100000001.0
+    ],
+    "CoolingDistanceIndex": [
+      0.024832840475500696,
+      1.0
+    ],
+    "RoadExposureIndex": [
+      0.035776968912028556,
+      0.6120697639141203
+    ],
+    "VegetationCoolingIndex": [
+      0.0,
+      1.0
+    ],
+    "TerrainExposureIndex": [
+      0.0,
+      1.0
+    ],
+    "HeatVulnerabilityIndex": [
+      0.009390781576010592,
+      0.8682574254995163
+    ],
+    "Target_LST": [
+      30.351918538411457,
+      52.048492431640625
+    ]
+  },
+  "target_stats": {
+    "mean": 40.770518865397676,
+    "std": 2.39809015945446,
+    "min": 30.351918538411457,
+    "max": 52.048492431640625
+  }
+}

@@ -1,0 +1,95 @@
+{
+  "fill_method": "median",
+  "columns_dropped_excessive_missing": [],
+  "columns_with_missing_before_fill": {
+    "MeanNDVI": {
+      "count": 42,
+      "pct": 0.08
+    },
+    "MaxNDVI": {
+      "count": 42,
+      "pct": 0.08
+    },
+    "MinNDVI": {
+      "count": 42,
+      "pct": 0.08
+    },
+    "GreenCover": {
+      "count": 42,
+      "pct": 0.08
+    },
+    "VegetationDensity": {
+      "count": 42,
+      "pct": 0.08
+    },
+    "VegDensityClass": {
+      "count": 42,
+      "pct": 0.08
+    },
+    "LandCoverClass": {
+      "count": 42,
+      "pct": 0.08
+    },
+    "MeanLST": {
+      "count": 342,
+      "pct": 0.64
+    },
+    "MaxLST": {
+      "count": 342,
+      "pct": 0.64
+    },
+    "MinLST": {
+      "count": 342,
+      "pct": 0.64
+    },
+    "MeanElevation": {
+      "count": 53,
+      "pct": 0.1
+    },
+    "MeanSlope": {
+      "count": 53,
+      "pct": 0.1
+    },
+    "MeanAQI": {
+      "count": 623,
+      "pct": 1.16
+    },
+    "MeanPM25": {
+      "count": 623,
+      "pct": 1.16
+    },
+    "MeanPM10": {
+      "count": 623,
+      "pct": 1.16
+    },
+    "MeanNO2": {
+      "count": 623,
+      "pct": 1.16
+    },
+    "MeanSO2": {
+      "count": 623,
+      "pct": 1.16
+    },
+    "MeanCO": {
+      "count": 623,
+      "pct": 1.16
+    },
+    "MeanO3": {
+      "count": 623,
+      "pct": 1.16
+    },
+    "VegetationCoolingIndex": {
+      "count": 42,
+      "pct": 0.08
+    },
+    "HeatVulnerabilityIndex": {
+      "count": 42,
+      "pct": 0.08
+    },
+    "Target_LST": {
+      "count": 342,
+      "pct": 0.64
+    }
+  },
+  "columns_with_missing_after_fill": {}
+}

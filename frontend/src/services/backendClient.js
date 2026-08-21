@@ -86,8 +86,42 @@ export async function fetchCurrentHeatDebug() {
   return fetchJson('/prediction/heat/current/debug');
 }
 
+/**
+ * Fetch current per-cell predicted LST predictions from /api/prediction/heat/current.
+ *
+ * This endpoint returns BOTH the single city-wide prediction AND the full
+ * per-cell predictions array (53,802 cells).  The frontend merges the
+ * per-cell predictions with static grid geometry to render the heat map.
+ *
+ * Normalised return shape:
+ * {
+ *   success: true,
+ *   predictions: [ { grid_id: ..., predicted_lst: ... }, ... ],
+ *   generated_at: "...",
+ *   prediction_count: N,
+ *   grid_summary: { mean_lst, min_lst, max_lst },
+ *   ...other metadata
+ * }
+ */
+export async function fetchCurrentHeatPredictions() {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 60000);
+  try {
+    const response = await fetch(`${API_BASE}/prediction/heat/current`, {
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      throw new Error(`${response.status} ${response.statusText}`);
+    }
+    return response.json();
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+/** @deprecated Use fetchCurrentHeatPredictions() — kept for backward compat. */
 export async function fetchCurrentHeatGrid() {
-  return fetchJson('/prediction/heat/current/grid');
+  return fetchCurrentHeatPredictions();
 }
 
 export async function runCurrentScenario(payload) {

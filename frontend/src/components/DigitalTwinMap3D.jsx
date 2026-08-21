@@ -5,7 +5,7 @@ import {
   Building2, Layers, RotateCcw, Route, Trees, Waves,
   MapPin, Maximize, Minimize, Orbit, Home, Camera, Crosshair
 } from 'lucide-react';
-import { fetchBoundary, fetchLayerGeoJson, fetchCurrentHeat, fetchCurrentHeatGrid, fetchJson } from '../services/backendClient';
+import { fetchBoundary, fetchLayerGeoJson, fetchCurrentHeatPredictions, fetchJson } from '../services/backendClient';
 import { computeAreaStats, featureDisplayName } from '../services/areaStats';
 
 const LOCAL_LAYER_BASE = '/3d-layers';
@@ -236,6 +236,15 @@ const fmtCellValue = (value, signed = false) => {
   return signed && value > 0 ? `+${rounded}` : rounded;
 };
 
+/**
+ * Normalize a grid_id from any property shape to a string.
+ * Supports grid_id, Grid_ID, gridid, GRID_ID fallbacks.
+ */
+function normalizeGridId(properties) {
+  const id = properties?.grid_id ?? properties?.Grid_ID ?? properties?.gridid ?? properties?.GRID_ID;
+  return id != null ? String(id) : null;
+}
+
 // ------------------------------------------------------------------ #
 export function DigitalTwinMap3D({
   layers = {},
@@ -272,6 +281,10 @@ export function DigitalTwinMap3D({
   const lastScenarioDataRef = useRef(null);
   const markerRef = useRef(null);
   const currentHeatGridRef = useRef(null);
+  const staticGridGeoJsonRef = useRef(null);
+  const gridGeometryMapRef = useRef(null);
+  const heatGridHandlersBoundRef = useRef(false);
+  const [staticGridReady, setStaticGridReady] = useState(false);
   const [mapReady, setMapReady] = useState(false);
   const [mapMode, setMapMode] = useState('current');
   const [counts, setCounts] = useState({ buildings: 0, roads: 0, green: 0, water: 0, trees: 0 });
@@ -532,6 +545,32 @@ export function DigitalTwinMap3D({
   }, [theme]);
 
   // ------------------------------------------------------------------ #
+  // Load static grid geometry (once, cached for the lifetime of the map)
+  // ------------------------------------------------------------------ #
+  useEffect(() => {
+    fetch('/3d-layers/predicted_lst_grid.geojson')
+      .then((response) => {
+        if (!response.ok) throw new Error(`Failed to load grid geometry: ${response.status}`);
+        return response.json();
+      })
+      .then((geojson) => {
+        staticGridGeoJsonRef.current = geojson;
+        const map = new Map();
+        for (const feature of geojson.features || []) {
+          const gid = normalizeGridId(feature.properties);
+          if (gid) map.set(gid, feature);
+        }
+        gridGeometryMapRef.current = map;
+        setStaticGridReady(true);
+        console.log(`Heat grid: Static geometry loaded — ${map.size} features`);
+      })
+      .catch((err) => {
+        console.error('Heat grid: Failed to load static geometry', err);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ------------------------------------------------------------------ #
   // City layer visibility
   // ------------------------------------------------------------------ #
   useEffect(() => {
@@ -577,7 +616,7 @@ export function DigitalTwinMap3D({
   // Terrain 3D toggle (with health check)
   // ------------------------------------------------------------------ #
   const [terrainStatus, setTerrainStatus] = useState('unchecked'); // unchecked | loading | available | unavailable | error
-  
+
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
@@ -661,94 +700,151 @@ export function DigitalTwinMap3D({
 
   // ------------------------------------------------------------------ #
   // Current predicted LST heat grid overlay
-  // Loads the real 53,802-cell prediction grid from /api/prediction/heat/current/grid
-  // and merges with authoritative grid geometry from Predicted_LST.geojson.
+  // Architecture: static geometry (local file) + dynamic predictions (backend).
+  // Geometry is loaded once and cached; only predictions are re-fetched.
   // ------------------------------------------------------------------ #
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
     const predLstVisible = layers.HEAT?.predicted_lst === true;
-    if (!predLstVisible) {
-      removeLayerIfPresent(map, 'current-heat-fill');
-      removeSourceIfPresent(map, 'current-heat-grid');
-      currentHeatGridRef.current = null;
-      return;
-    }
 
-    // Don't reload if we already have the data
-    if (currentHeatGridRef.current) {
+    if (!predLstVisible) {
+      // Hide layer but preserve data — avoid re-downloading geometry on toggle
       if (map.getLayer('current-heat-fill')) {
-        map.setLayoutProperty('current-heat-fill', 'visibility', 'visible');
+        map.setLayoutProperty('current-heat-fill', 'visibility', 'none');
       }
       return;
     }
 
-// Fetch current predictions AND authoritative grid geometry in parallel
-    // Using a Promise chain to avoid parser issues with function declarations in useEffect
-    Promise.all([
-      fetchCurrentHeatGrid(),
-      fetchJson('/data/layers/predicted-lst')
-    ])
-      .then(([predResult, gridGeojson]) => {
-        if (!predResult?.success || !predResult?.predictions?.length) return;
-        if (!gridGeojson?.features?.length) {
-          console.warn('Heat grid: No grid geometry available from Predicted_LST.geojson');
+    // If we already have merged data, just show the existing layer
+    if (currentHeatGridRef.current && map.getLayer('current-heat-fill')) {
+      map.setLayoutProperty('current-heat-fill', 'visibility', 'visible');
+      return;
+    }
+
+    // Wait for the static geometry to be loaded before merging
+    if (!staticGridReady || !gridGeometryMapRef.current) {
+      return; // Will re-run when staticGridReady changes
+    }
+
+    const geometryMap = gridGeometryMapRef.current;
+
+    // Fetch dynamic predictions from /api/prediction/heat/current
+    fetchCurrentHeatPredictions()
+      .then((result) => {
+        if (!result?.success || !result?.predictions?.length) {
+          console.warn('Heat grid: No prediction data available from backend');
           return;
         }
 
-        const predictions = predResult.predictions;
-        const predMap = {};
+        const predictions = result.predictions;
+
+        // Build a lookup: grid_id (string) → predicted_lst
+        const predMap = new Map();
         for (const p of predictions) {
-          predMap[String(p.grid_id)] = p.predicted_lst;
+          const gid = normalizeGridId(p);
+          if (gid && gid !== 'undefined' && gid !== 'null') {
+            predMap.set(gid, p.predicted_lst);
+          }
         }
 
-        // Merge current predictions with authoritative grid geometry
+        // Merge: iterate over static geometry and attach dynamic predictions
         const features = [];
-        const gridFeatures = gridGeojson.features;
-        for (let i = 0; i < gridFeatures.length; i++) {
-          const f = gridFeatures[i];
-          const gid = String(f.properties?.grid_id ?? f.properties?.Grid_ID);
-          features.push({
-            type: 'Feature',
-            properties: {
-              grid_id: gid,
-              predicted_lst: predMap[gid] ?? f.properties?.Predicted_LST ?? null,
-              source: 'XGBoost (current)',
-              generated_at: predResult.generated_at,
-            },
-            geometry: f.geometry,
-          });
+        let matchedCount = 0;
+        let unmatchedGeometryCount = 0;
+        let unmatchedPredictionCount = predMap.size;
+
+        for (const [gid, geometryFeature] of geometryMap) {
+          const predicted_lst = predMap.get(gid);
+          if (predicted_lst !== undefined && predicted_lst !== null) {
+            matchedCount++;
+            unmatchedPredictionCount--;
+            features.push({
+              type: 'Feature',
+              properties: {
+                grid_id: gid,
+                predicted_lst: predicted_lst,
+                source: 'XGBoost (current)',
+                generated_at: result.generated_at || null,
+              },
+              geometry: geometryFeature.geometry,
+            });
+          } else {
+            unmatchedGeometryCount++;
+          }
+        }
+
+        // Diagnostics
+        let minLst = Infinity;
+        let maxLst = -Infinity;
+        for (const f of features) {
+          const v = f.properties.predicted_lst;
+          if (typeof v === 'number' && Number.isFinite(v)) {
+            if (v < minLst) minLst = v;
+            if (v > maxLst) maxLst = v;
+          }
+        }
+
+        console.log(
+          '[Heat Grid Diagnostics]\n' +
+          `  Static geometry features: ${geometryMap.size}\n` +
+          `  Backend predictions:      ${predictions.length}\n` +
+          `  Matched features:         ${matchedCount}\n` +
+          `  Unmatched geometry:       ${unmatchedGeometryCount}\n` +
+          `  Unmatched predictions:    ${unmatchedPredictionCount}\n` +
+          `  Min LST:                  ${Number.isFinite(minLst) ? minLst.toFixed(1) + ' \u00b0C' : 'N/A'}\n` +
+          `  Max LST:                  ${Number.isFinite(maxLst) ? maxLst.toFixed(1) + ' \u00b0C' : 'N/A'}`
+        );
+
+        // Prominent warning if match rate is below 90%
+        if (geometryMap.size > 0 && matchedCount / geometryMap.size < 0.9) {
+          console.warn(
+            `[Heat Grid WARNING] Only ${(matchedCount / geometryMap.size * 100).toFixed(1)}% match rate ` +
+            `(${matchedCount}/${geometryMap.size}). ` +
+            `Check grid_id normalization between geometry and predictions.`
+          );
+        }
+
+        if (!features.length) {
+          console.warn('Heat grid: No features after merge — check grid_id matching between geometry and predictions');
+          return;
+        }
+
+        if (!Number.isFinite(minLst) || !Number.isFinite(maxLst)) {
+          console.warn('Heat grid: No valid predicted LST values');
+          return;
         }
 
         const fc = { type: 'FeatureCollection', features };
         addOrUpdateSource(map, 'current-heat-grid', fc);
 
         if (!map.getLayer('current-heat-fill')) {
-          // Calculate LST domain for color ramp
-          let minLst = Infinity, maxLst = -Infinity;
-          for (const f of features) {
-            const v = f.properties.predicted_lst;
-            if (v != null && !Number.isNaN(v)) {
-              if (v < minLst) minLst = v;
-              if (v > maxLst) maxLst = v;
-            }
-          }
-          if (minLst === Infinity) return;
-          const mid = (minLst + maxLst) / 2;
           addLayerIfMissing(map, {
             id: 'current-heat-fill',
             type: 'fill',
             source: 'current-heat-grid',
-            paint: {
-              'fill-color': ['interpolate', ['linear'], ['get', 'predicted_lst'],
-                minLst, '#2c7bb6', mid, '#fdae61', maxLst, '#d7191c'],
-              'fill-opacity': 0.55,
-            },
             layout: { visibility: 'visible' },
+            paint: {
+              'fill-color': [
+                'interpolate', ['linear'], ['get', 'predicted_lst'],
+                minLst, '#313695',
+                minLst + (maxLst - minLst) * 0.2, '#74add1',
+                minLst + (maxLst - minLst) * 0.4, '#abd9e9',
+                minLst + (maxLst - minLst) * 0.6, '#fee090',
+                minLst + (maxLst - minLst) * 0.8, '#f46d43',
+                maxLst, '#a50026',
+              ],
+              'fill-opacity': 0.65,
+            },
           }, 'roads-major');
+        } else {
+          map.setLayoutProperty('current-heat-fill', 'visibility', 'visible');
+        }
 
-          // Add click handler
+        // Click / hover handlers — bind only once
+        if (!heatGridHandlersBoundRef.current) {
+          heatGridHandlersBoundRef.current = true;
           map.on('click', 'current-heat-fill', (e) => {
             const p = e.features?.[0]?.properties || {};
             if (popupRef.current) popupRef.current.remove();
@@ -772,12 +868,13 @@ export function DigitalTwinMap3D({
             if (popupRef.current) popupRef.current.remove();
           });
         }
+
         currentHeatGridRef.current = fc;
       })
       .catch((err) => {
-        console.warn('Heat grid: Failed to load current predictions or grid geometry', err);
+        console.error('Heat grid: Failed to load predictions from backend', err);
       });
-  }, [mapReady, layers.HEAT?.predicted_lst]);
+  }, [mapReady, layers.HEAT?.predicted_lst, staticGridReady]);
 
   // REMOVED: fetchScenarioCellsForGeometry - no longer needed
   // REMOVED: renderHeatAsPoints fallback - we now use authoritative Predicted_LST.geojson geometry

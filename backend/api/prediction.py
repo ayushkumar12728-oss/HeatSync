@@ -128,15 +128,46 @@ def current_heat(serving: ServingContext = Depends(get_serving)) -> JSONResponse
         missing_sources = grid.get("missing_sources", [])
         fallback_used = grid.get("fallback_used", False)
 
+        generated_at = prediction.get("generated_at")
+
         response = {
             "success": True,
             "predicted_lst_c": prediction_lst,
             "prediction": predicted,
+            "generated_at": generated_at,
             "status": pipeline_status,
             "missing_sources": missing_sources,
             "fallback_used": fallback_used,
             "snapshot_id": snapshot_id,
         }
+
+        # --- Per-cell predictions (fast path, cached) ---
+        # The frontend merges these with static geometry to render the
+        # full 53,802-cell predicted-LST heat grid.
+        response["api_build_version"] = "heat-grid-v2"
+        log.info(
+            "Grid prediction request: snapshot_id=%s, model=%s",
+            snapshot_id, type(serving.model).__name__,
+        )
+        try:
+            grid_result = serving.get_current_grid_predictions_fast()
+            cells = grid_result.get("cells", [])
+            response["predictions"] = cells
+            response["prediction_count"] = len(cells)
+            response["grid_summary"] = grid_result.get("summary", {})
+            log.info(
+                "Per-cell predictions included: count=%d, summary=%s",
+                len(cells), grid_result.get("summary", {}),
+            )
+        except Exception as grid_exc:
+            log.exception("Per-cell grid prediction failed")
+            response["predictions"] = []
+            response["prediction_count"] = 0
+            response["grid_summary"] = None
+            response["grid_prediction_error"] = {
+                "type": type(grid_exc).__name__,
+                "message": str(grid_exc),
+            }
 
         # 200 when we have a valid prediction, even if partial
         return JSONResponse(content=response)

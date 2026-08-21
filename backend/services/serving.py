@@ -110,6 +110,19 @@ class ServingContext:
         self._prediction_cache: dict[str, dict] = {}  # snapshot_id -> prediction result
         self._prediction_cache_lock = threading.RLock()
 
+        # --- Eager startup loading ---
+        # Pre-load model + features + static matrix so the first /heat/current
+        # request doesn't pay the full cold-start penalty.
+        if self.model_available:
+            try:
+                _ = self.model
+                _ = self.features
+                _ = self.preprocessor
+                self._load_static_feature_matrix()
+                log.info("Startup eager-load complete — model, features, and static matrix ready.")
+            except Exception as exc:
+                log.warning("Startup eager-load failed (will retry lazily): %s", exc)
+
     # ------------------------------------------------------------------ #
     # Public properties
     # ------------------------------------------------------------------ #
@@ -480,22 +493,26 @@ class ServingContext:
         # Build dynamic feature overrides (AQI only)
         dynamic_overrides = self._get_dynamic_overrides(snap)
         
-        # Build feature matrix: static base + dynamic overrides
-        X = self._build_feature_matrix_with_overrides(dynamic_overrides)
-        
-        # Predict
-        predictions = self.model.predict(self._static_feature_matrix)
-        
-        # If there are dynamic overrides, we need to re-predict with overrides
-        if dynamic_overrides:
-            X_with_overrides = self._apply_overrides(self._static_feature_matrix, dynamic_overrides)
-            predictions = self.model.predict(X_with_overrides)
-        else:
-            predictions = self.model.predict(self._static_feature_matrix)
+        # Build feature matrix: static base + dynamic overrides (AQI)
+        # Apply overrides FIRST, then predict ONCE.
+        X = self._apply_overrides(self._static_feature_matrix, dynamic_overrides)
+
+        log.info(
+            "Grid prediction: snapshot=%s, cells=%d, overrides=%d",
+            snapshot_id, self._static_feature_matrix.shape[0], len(dynamic_overrides),
+        )
+
+        predictions = self.model.predict(X)
         
         predictions = np.asarray(predictions).ravel()
         grid_ids = list(self.grid_ids[:len(predictions)])
-        
+
+        log.info(
+            "Grid prediction complete: predictions=%d, grid_ids=%d, min=%.2f, max=%.2f, mean=%.2f",
+            len(predictions), len(grid_ids),
+            float(np.min(predictions)), float(np.max(predictions)), float(np.mean(predictions)),
+        )
+
         cells = [
             {
                 "grid_id": _as_gid(grid_ids[i]),
@@ -561,12 +578,6 @@ class ServingContext:
             X[:, idx] = val
         return X
     
-    def _build_feature_matrix_with_overrides(self, overrides: dict[int, float]) -> np.ndarray:
-        """Build feature matrix with dynamic overrides applied to static base."""
-        if not self._static_feature_loaded:
-            self._load_static_feature_matrix()
-        return self._apply_overrides(self._static_feature_matrix, overrides)
-
     def invalidate_caches(self) -> None:
         """Invalidate all caches (call when model changes)."""
         with self._lock:

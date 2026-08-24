@@ -98,6 +98,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     search,
     simulation,
     system,
+    temporal,
+    live,
 )
 
     for module in (
@@ -116,6 +118,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     search,
     system,
     live,
+    temporal,
 ):
      app.include_router(module.router)
     @app.get("/")

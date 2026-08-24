@@ -327,6 +327,7 @@ class ScenarioCellsService:
                 "pct_cells_cooler": data["pct_cells_cooler"],
             })
         df = pd.DataFrame(rows).sort_values("mean_delta_lst").reset_index(drop=True)
+        self.settings.sensitivity_csv.parent.mkdir(parents=True, exist_ok=True)
         df.to_csv(self.settings.sensitivity_csv, index=False)
         log.info("Sensitivity CSV regenerated on the full grid: %s",
                  self.settings.sensitivity_csv)

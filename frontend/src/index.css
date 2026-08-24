@@ -1192,13 +1192,14 @@ select {
   left: 14px;
   display: grid;
   gap: 3px;
-  max-width: min(430px, calc(100% - 140px));
-  padding: 10px 13px;
-  border-radius: 11px;
+  width: 215px;
+  max-width: min(215px, calc(100% - 140px));
+  padding: 9px 11px;
+  border-radius: 10px;
 }
 
 .maplibre-top-card strong {
-  font-size: 0.88rem;
+  font-size: 0.82rem;
   line-height: 1.2;
 }
 
@@ -1206,18 +1207,20 @@ select {
 .maplibre-top-card small,
 .maplibre-source-card span {
   color: var(--text-secondary);
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   line-height: 1.35;
 }
 
 .maplibre-kicker {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   color: var(--primary-sky);
-  font-size: 0.68rem;
+  font-size: 0.62rem;
   font-weight: 800;
   text-transform: uppercase;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
 }
 
 .maplibre-stats-card {
@@ -1258,10 +1261,31 @@ select {
 
 .maplibre-source-card {
   left: 14px;
-  bottom: 14px;
+  bottom: 38px;
   max-width: min(560px, calc(100% - 32px));
   padding: 8px 11px;
   border-radius: 10px;
+}
+
+/* Compact bottom-left MapLibre distance scale ruler */
+.maplibre-shell .maplibregl-ctrl-bottom-left {
+  left: 14px;
+  bottom: 4px;
+  z-index: 1;
+}
+
+.maplibre-shell .maplibregl-ctrl-scale {
+  background: var(--bg-glass);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-light);
+  border-top: none;
+  border-radius: 0 0 4px 4px;
+  font-size: 0.58rem;
+  font-family: var(--font-body);
+  font-weight: 700;
+  padding: 1px 4px;
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(8px);
 }
 
 /* Map coordinates chip (bottom-right, above zoom controls) */

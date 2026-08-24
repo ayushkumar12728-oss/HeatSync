@@ -299,7 +299,7 @@ export function DigitalTwinMap3D({
     });
 
     map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
-    map.addControl(new maplibregl.ScaleControl({ maxWidth: 140, unit: 'metric' }), 'bottom-left');
+    map.addControl(new maplibregl.ScaleControl({ maxWidth: 80, unit: 'metric' }), 'bottom-left');
 
     // Keep the canvas sized to its container: the map can mount while the
     // layout is still settling (zero-height container -> MapLibre's 300 px
@@ -1303,12 +1303,12 @@ export function DigitalTwinMap3D({
       )}
 
       {/* Current prediction provenance box */}
-      {currentPrediction && (
+      {currentPrediction && !selectedPoint && (
         <div className="maplibre-source-card" style={{
           position: 'absolute',
-          bottom: '80px',
-          left: '20px',
-          zIndex: 998,
+          bottom: '134px',
+          left: '14px',
+          zIndex: 2,
           padding: '8px 12px',
           borderRadius: '8px',
           background: 'var(--bg-subtle)',
@@ -1325,12 +1325,12 @@ export function DigitalTwinMap3D({
       )}
 
       {/* Live weather context — NOT used by V1 model */}
-      {currentPrediction && (
+      {currentPrediction && !selectedPoint && (
         <div className="maplibre-source-card" style={{
           position: 'absolute',
-          bottom: '56px',
-          left: '20px',
-          zIndex: 998,
+          bottom: '92px',
+          left: '14px',
+          zIndex: 2,
           padding: '8px 12px',
           borderRadius: '8px',
           background: 'var(--bg-subtle)',

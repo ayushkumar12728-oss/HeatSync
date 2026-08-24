@@ -125,7 +125,7 @@ class FeatureProvenance:
         self.feature_name = feature_name
         self.source: str | None = None
         self.timestamp: str | None = None
-        self.status: str = "unavailable"  # live | modelled | unavailable
+        self.status: str = "UNAVAILABLE"  # LIVE | LATEST_OBSERVATION | STATIC_GIS | DERIVED | UNAVAILABLE
         self.raw_value: float | None = None
         self.normalized_value: float | None = None
 
@@ -707,7 +707,7 @@ class LiveFeaturePipeline:
         if satellite:
             for feat_name in _SAT_FEATURES:
                 pf = next((p for p in provenances if p.feature_name == feat_name), None)
-                if pf and pf.status == "unavailable":
+                if pf and pf.status in ("UNAVAILABLE", "unavailable"):
                     val = satellite.get(feat_name)
                     if val is not None:
                         pf.source = "Sentinel-2 (satellite)"

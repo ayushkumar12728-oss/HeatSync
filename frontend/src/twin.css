@@ -613,7 +613,7 @@ button.ci-highlight:hover { border-color: var(--border-accent); }
   width: min(360px, calc(100% - 28px));
   max-height: calc(100% - 60px);
   overflow-y: auto;
-  z-index: 20;
+  z-index: 1000;
 }
 
 .loc-panel {
@@ -740,7 +740,7 @@ button.ci-highlight:hover { border-color: var(--border-accent); }
 .maplibre-camera {
   position: absolute;
   z-index: 2;
-  right: 14px;
+  right: 58px;
   top: 14px;
   display: flex;
   flex-direction: column;

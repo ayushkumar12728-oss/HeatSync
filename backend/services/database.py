@@ -1,18 +1,18 @@
 """
-Optional PostgreSQL / PostGIS service
-=====================================
-The API is artifact-first: by default every endpoint reads the trained model
-and pipeline outputs from disk. When ``UDT_DATABASE_URL`` is set (see
-``database/seed/load_artifacts.py`` to populate the database), this
-service provides PostGIS-backed read access to the grid cells.
+Database service (SQLite / PostgreSQL / PostGIS)
+=================================================
+Provides database-backed storage and fast indexed access for the 53,802 grid
+cells, predictions, and simulation results.
 
-The module imports SQLAlchemy lazily so the API runs fine without the
-database driver installed.
+Automatically activates SQLite database (``data/urban_digital_twin.db``) when
+present, or connects to PostgreSQL/PostGIS when ``UDT_DATABASE_URL`` is set.
 """
 
 from __future__ import annotations
 
+import json
 import logging
+from pathlib import Path
 
 from backend.config.settings import Settings
 
@@ -25,10 +25,18 @@ class DatabaseService:
         self._engine = None
         self._unavailable_reason: str | None = None
 
-    # ------------------------------------------------------------------ #
+    @property
+    def database_url(self) -> str | None:
+        if self.settings.database_url:
+            return self.settings.database_url
+        sqlite_file = self.settings.data_dir / "urban_digital_twin.db"
+        if sqlite_file.exists():
+            return f"sqlite:///{sqlite_file}"
+        return None
+
     @property
     def enabled(self) -> bool:
-        return bool(self.settings.database_url)
+        return bool(self.database_url)
 
     def _get_engine(self):
         if not self.enabled:
@@ -36,7 +44,9 @@ class DatabaseService:
         if self._engine is None:
             try:
                 from sqlalchemy import create_engine
-                self._engine = create_engine(self.settings.database_url, pool_pre_ping=True)
+                url = self.database_url
+                connect_args = {"check_same_thread": False} if "sqlite" in url.lower() else {}
+                self._engine = create_engine(url, pool_pre_ping=True, connect_args=connect_args)
             except Exception as exc:
                 self._unavailable_reason = str(exc)
                 log.error("Database unavailable: %s", exc)
@@ -49,23 +59,55 @@ class DatabaseService:
             return {"enabled": False, "reason": self._unavailable_reason or "not configured"}
         try:
             from sqlalchemy import text
+            url = self.database_url or ""
+            is_sqlite = "sqlite" in url.lower()
+            engine_name = "SQLite" if is_sqlite else "PostgreSQL/PostGIS"
             with engine.connect() as conn:
                 result = conn.execute(text("SELECT count(*) FROM grid_cells"))
                 count = result.scalar()
-            return {"enabled": True, "grid_cells": int(count)}
+            return {
+                "enabled": True,
+                "status": "connected",
+                "engine": engine_name,
+                "grid_cells": int(count),
+            }
         except Exception as exc:
             log.debug("Database probe failed: %s", exc)
-            return {"enabled": True, "error": str(exc)}
+            return {"enabled": False, "error": str(exc)}
 
-    # ------------------------------------------------------------------ #
     def grid_cells(self, bbox: list[float] | None = None,
                    limit: int = 1000) -> list[dict]:
         """Return grid cells (with geometry) as GeoJSON features."""
         engine = self._get_engine()
         if not engine:
-            raise RuntimeError("PostGIS not configured (set UDT_DATABASE_URL)")
+            raise RuntimeError("Database not configured (set UDT_DATABASE_URL or create data/urban_digital_twin.db)")
         if not (1 <= limit <= 5000):
             limit = 1000
+
+        url = self.database_url or ""
+        is_sqlite = "sqlite" in url.lower()
+
+        if is_sqlite:
+            from sqlalchemy import text
+            sql = "SELECT cell_id, geometry, properties FROM grid_cells"
+            params: dict = {}
+            if bbox:
+                sql += " WHERE minx >= :xmin AND miny >= :ymin AND maxx <= :xmax AND maxy <= :ymax"
+                params = {"xmin": bbox[0], "ymin": bbox[1], "xmax": bbox[2], "ymax": bbox[3]}
+            sql += f" LIMIT {limit}"
+            features = []
+            with engine.connect() as conn:
+                for row in conn.execute(text(sql), params):
+                    geom = json.loads(row[1]) if isinstance(row[1], str) else row[1]
+                    props = json.loads(row[2]) if isinstance(row[2], str) else row[2]
+                    features.append({
+                        "type": "Feature",
+                        "properties": props if isinstance(props, dict) else {"cell_id": row[0]},
+                        "geometry": geom,
+                    })
+            return {"type": "FeatureCollection", "features": features}
+
+        # PostgreSQL / PostGIS path
         sql = (
             "SELECT cell_id, ST_AsGeoJSON(geometry) AS geometry, "
             "       to_jsonb(t) - 'geometry' AS properties "

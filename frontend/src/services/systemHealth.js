@@ -86,7 +86,7 @@ export function buildSystemStatus(health, fallbackError = null) {
   }
   entries.push(core);
 
-  // Database — optional (artifact-first mode). Not configured is a neutral state.
+  // Database — local SQLite or PostGIS.
   const db = health?.database;
   entries.push({
     key: 'database',
@@ -94,7 +94,7 @@ export function buildSystemStatus(health, fallbackError = null) {
     value: db?.enabled === true ? 'Connected' : 'Not configured',
     tone: db?.enabled === true ? 'ok' : 'config',
     detail: db?.enabled === true
-      ? `${db.grid_cells ?? ''} grid cells (PostGIS)`.trim()
+      ? `${db.grid_cells ? Number(db.grid_cells).toLocaleString() : ''} grid cells (${db.engine || 'Connected'})`.trim()
       : 'Artifact-first mode — PostGIS optional (UDT_DATABASE_URL)',
     source: 'GET /api/health/database'
   });

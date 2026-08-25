@@ -30,7 +30,11 @@ import hashlib
 import logging
 import threading
 import time
-from datetime import UTC, datetime
+try:
+    from datetime import UTC, datetime
+except ImportError:
+    from datetime import datetime, timezone
+    UTC = timezone.utc
 from typing import Any
 
 log = logging.getLogger("backend.live_data.snapshot")

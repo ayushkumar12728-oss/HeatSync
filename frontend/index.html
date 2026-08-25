@@ -1,13 +1,20 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔥</text></svg>" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%230284c7'><path d='M12 2c1.1 0 2 .9 2 2 0 .74-.4 1.38-1 1.73V7h2a5 5 0 0 1 5 5v1a5 5 0 0 1-5 5h-1v2.27c.6.35 1 .99 1 1.73 0 1.1-.9 2-2 2s-2-.9-2-2c0-.74.4-1.38 1-1.73V18H10a5 5 0 0 1-5-5v-1a5 5 0 0 1 5-5h1V5.73c-.6-.35-1-.99-1-1.73 0-1.1.9-2 2-2z'/></svg>" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>HeatSync — Hyperlocal Urban Heat & Air Quality Digital Twin</title>
-    <meta name="description" content="Hyperlocal 25m–100m Urban Heat and Air Quality Digital Twin for municipal cooling intervention simulation, equity scoring, and uncertainty quantification (SOAIDEATHON-S18)." />
+    <title>HeatSync | Bhubaneswar AI Microclimate Digital Twin</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
   </head>
-  <body>
+  <body class="bg-[#070b12] text-slate-100 antialiased selection:bg-cyan-500 selection:text-white overflow-x-hidden min-h-screen">
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

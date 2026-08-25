@@ -1,28 +1,18 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
-  optimizeDeps: {
-  exclude: ["maplibre-gl"],
-  },
-
+  plugins: [react(), tailwindcss()],
   server: {
-    host: 'localhost',
-    port: 5173,
-    // In development the frontend calls the FastAPI backend through this
-    // proxy (same-origin /api requests), which avoids CORS entirely.
-    // Production builds keep using VITE_BACKEND_API_URL / localhost:8000.
+    port: 3000,
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: 'http://127.0.0.1:8000',
         changeOrigin: true,
-      },
-    },
-    hmr: {
-      host: 'localhost',
-      port: 5173,
-    },
-  },
+        secure: false,
+      }
+    }
+  }
 })

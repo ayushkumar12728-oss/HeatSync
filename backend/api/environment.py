@@ -61,7 +61,7 @@ def _ring_length(coords: list[list[float]]) -> float:
     if len(coords) < 2:
         return 0.0
     total = 0.0
-    for (lng1, lat1), (lng2, lat2) in zip(coords, coords[1:] + coords[:1], strict=True):
+    for (lng1, lat1), (lng2, lat2) in zip(coords, coords[1:] + coords[:1]):
         total += _haversine(lat1, lng1, lat2, lng2)
     return total
 
@@ -85,7 +85,7 @@ def _polygon_area_m2(geometry: dict) -> float:
         return 0.0
     # planar area in degree^2 then scaled to m^2
     area_deg2 = 0.0
-    for (lng1, lat1), (lng2, lat2) in itertools.pairwise(coords):
+    for (lng1, lat1), (lng2, lat2) in zip(coords, coords[1:]):
         area_deg2 += (lng2 - lng1) * (lat2 + lat1)
     area_deg2 = abs(area_deg2) / 2.0
     return area_deg2 * M_PER_DEG_LNG * M_PER_DEG_LAT

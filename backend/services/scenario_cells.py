@@ -36,7 +36,11 @@ import logging
 import os
 import threading
 import time
-from datetime import UTC, datetime
+try:
+    from datetime import UTC, datetime
+except ImportError:
+    from datetime import datetime, timezone
+    UTC = timezone.utc
 from pathlib import Path
 from typing import Any
 
@@ -231,7 +235,7 @@ class ScenarioCellsService:
             lons, lats = transformer.transform(xs, ys)
             geometries[gid] = [
                 [round(float(lon), COORD_DECIMALS), round(float(lat), COORD_DECIMALS)]
-                for lon, lat in zip(lons, lats, strict=True)
+                for lon, lat in zip(lons, lats)
             ]
             centroid = Polygon([(float(p[0]), float(p[1])) for p in ring]).centroid
             clon, clat = transformer.transform(centroid.x, centroid.y)

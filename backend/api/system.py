@@ -16,7 +16,11 @@ fails, that service reports ``unavailable`` with a reason.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+try:
+    from datetime import UTC, datetime
+except ImportError:
+    from datetime import datetime, timezone
+    UTC = timezone.utc
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
@@ -193,16 +197,17 @@ def _terrain_report(settings: Settings) -> dict:
     backend only reports availability when tiles exist locally.
     """
     import os
-    # Check multiple possible locations (local dev vs Docker)
+    from pathlib import Path
     terrain_dirs = [
         settings.project_root / "frontend" / "public" / "terrain",
         settings.project_root / "terrain",
-        "/app/frontend/public/terrain",  # Docker (if ever added)
+        Path("/app/frontend/public/terrain"),
     ]
     terrain_dir = None
     for td in terrain_dirs:
-        if td.exists():
-            terrain_dir = td
+        p = Path(td)
+        if p.exists():
+            terrain_dir = p
             break
     if terrain_dir is None:
         return {
@@ -244,6 +249,7 @@ def _terrain_report(settings: Settings) -> dict:
 
 
 @router.get("/health")
+@router.get("/status")
 def system_health(
     settings: Settings = Depends(get_settings),
     catalog: DataCatalog = Depends(get_catalog),

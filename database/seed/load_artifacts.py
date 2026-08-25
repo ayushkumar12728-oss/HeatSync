@@ -115,7 +115,7 @@ def main() -> int:
                     f"INSERT INTO grid_cells ({column_list}) VALUES ({placeholders}) "  # noqa: S608
                     "ON CONFLICT (grid_id) DO NOTHING"
                 )
-                conn.execute(insert_sql, [dict(zip(cols, row, strict=True)) for row in chunk])
+                conn.execute(insert_sql, [dict(zip(cols, row)) for row in chunk])
         log.info("grid_cells loaded: %d rows", len(rows))
     else:
         log.warning("Grid GeoJSON not found: %s - skipping grid_cells", args.grid)

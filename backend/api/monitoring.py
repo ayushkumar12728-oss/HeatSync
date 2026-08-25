@@ -11,7 +11,11 @@ decide which layers it may render and which it must show as unavailable.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+try:
+    from datetime import UTC, datetime
+except ImportError:
+    from datetime import datetime, timezone
+    UTC = timezone.utc
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse

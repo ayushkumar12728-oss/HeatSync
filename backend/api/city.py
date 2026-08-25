@@ -100,6 +100,7 @@ def city_intelligence(
 
 
 @router.get("/distribution")
+@router.get("/distributions")
 def city_distribution(
     city: CityDataService = Depends(get_city_data),
 ) -> JSONResponse:

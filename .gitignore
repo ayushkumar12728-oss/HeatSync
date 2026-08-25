@@ -20,6 +20,7 @@ frontend/dist/
 
 *.log
 backend/logs/
+.matplotlib/
 
 
 postgres_data/

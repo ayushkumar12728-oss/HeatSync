@@ -586,6 +586,8 @@ class CityDataService:
     # City intelligence (command centre)
     # ------------------------------------------------------------------ #
     def city_intelligence(self) -> dict:
+        if getattr(self, "_cached_intel", None) is not None:
+            return self._cached_intel
         hotspots = self.hotspots(limit=5)
         deltas, stats = self._load_scenarios()
         features = self._load_features()
@@ -622,6 +624,8 @@ class CityDataService:
             "scenario_count": len(deltas),
             "source": "Real grid features + XGBoost predictions + cached scenario results",
         }
+        self._cached_intel = result
+        return result
 
     # ------------------------------------------------------------------ #
     # Distributions (analytics)
@@ -884,7 +888,7 @@ def _route_stats(path_i, lngs, lats, cell_lst, gids) -> dict:
     coords = [[round(float(lngs[i]), 6), round(float(lats[i]), 6)] for i in path_i]
     distance_m = sum(
         _haversine_m(lats[a], lngs[a], lats[b], lngs[b])
-        for a, b in itertools.pairwise(path_i)
+        for a, b in zip(path_i, path_i[1:])
     )
     lsts = [cell_lst[i] for i in path_i if np.isfinite(cell_lst[i])]
     return {

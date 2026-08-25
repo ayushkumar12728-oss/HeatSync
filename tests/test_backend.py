@@ -339,7 +339,7 @@ def test_predict_matches_saved_outputs(client):
     assert r.status_code == 200
     live = [p["predicted_lst_c"] for p in r.json()["predictions"]]
     saved = preds.set_index("Grid_ID").loc[df["Grid_ID"]]["Predicted_LST"].tolist()
-    assert max(abs(a - b) for a, b in zip(live, saved, strict=True)) < 1e-3
+    assert max(abs(a - b) for a, b in zip(live, saved)) < 1e-3
 
 
 @requires_artifacts

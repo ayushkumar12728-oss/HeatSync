@@ -1,0 +1,33 @@
+{
+  "fingerprint": "5b4886351c57fa29",
+  "scenarios": {
+    "increase_green_10": {
+      "generated_at": "2026-08-25T04:11:27.444175+00:00",
+      "count": 53802
+    },
+    "increase_green_20": {
+      "generated_at": "2026-08-25T04:11:30.838133+00:00",
+      "count": 53802
+    },
+    "decrease_buildings_10": {
+      "generated_at": "2026-08-25T04:11:34.086292+00:00",
+      "count": 53802
+    },
+    "decrease_buildings_20": {
+      "generated_at": "2026-08-25T04:11:37.376611+00:00",
+      "count": 53802
+    },
+    "increase_trees": {
+      "generated_at": "2026-08-25T04:11:40.719048+00:00",
+      "count": 53802
+    },
+    "increase_parks": {
+      "generated_at": "2026-08-25T04:11:44.042416+00:00",
+      "count": 53802
+    },
+    "increase_water": {
+      "generated_at": "2026-08-25T04:11:47.431538+00:00",
+      "count": 53802
+    }
+  }
+}

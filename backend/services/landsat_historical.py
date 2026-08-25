@@ -32,7 +32,15 @@ import hashlib
 import json
 import logging
 import time
-from datetime import UTC, datetime, timedelta, timezone
+try:
+    try:
+    from datetime import UTC, datetime
+except ImportError:
+    from datetime import datetime, timezone
+    UTC = timezone.utc, timedelta, timezone
+except ImportError:
+    from datetime import datetime, timedelta, timezone
+    UTC = timezone.utc
 from pathlib import Path
 from typing import Any, Optional
 

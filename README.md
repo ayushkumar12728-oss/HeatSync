@@ -4,6 +4,10 @@ An AI-powered **Urban Digital Twin** for monitoring, predicting and simulating
 **Urban Heat Island (UHI)** effects in Bhubaneswar, Odisha, India — from raw
 satellite imagery to an interactive web dashboard.
 
+## 🎥 Project Demo
+
+[![HeatSync | SOA Ideathon 2026 | Prototype Video](https://img.youtube.com/vi/-UzBcTqjUp8/maxresdefault.jpg)](https://youtu.be/-UzBcTqjUp8)
+
 This monorepo merges the **HeatSync** frontend (React + Vite) with
 the **Urban Digital Twin** AI / GIS / ML / data pipeline (FastAPI + Python):
 
